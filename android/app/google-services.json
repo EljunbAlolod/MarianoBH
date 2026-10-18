@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "200568608153",
+    "project_id": "marianobh-fcc1b",
+    "storage_bucket": "marianobh-fcc1b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:200568608153:android:261d8e57b9b807db5e6f08",
+        "android_client_info": {
+          "package_name": "com.marianobh.boarding_house"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "200568608153-3unatmg592268lt7drnv7i0qe10so43g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marianobh.boarding_house",
+            "certificate_hash": "72807c7084419bac452e1a7cf835496b39a6526c"
+          }
+        },
+        {
+          "client_id": "200568608153-57439vna2ql5jt2f8dnp5l8dchf4tvjn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTg6_9NK0K62QKzMdQHsbT182zA27_8R8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "200568608153-57439vna2ql5jt2f8dnp5l8dchf4tvjn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

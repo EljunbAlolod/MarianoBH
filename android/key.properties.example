@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties and replace every placeholder.
+# Never commit key.properties or the keystore file.
+storePassword=REPLACE_WITH_A_STRONG_PASSWORD
+keyPassword=REPLACE_WITH_A_STRONG_PASSWORD
+keyAlias=marianobh-upload
+storeFile=C:\\absolute\\private\\path\\to\\marianobh-upload.jks

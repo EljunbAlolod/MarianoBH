@@ -1,0 +1,4878 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isVerifiedSelf(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
+    }
+
+    function hasValidProfileFields() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'email',
+          'displayName',
+          'primaryHouseId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'email',
+          'displayName',
+          'primaryHouseId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.auth.token.email is string
+        && data.email is string
+        && data.email == request.auth.token.email
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && data.primaryHouseId == 'primary'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function hasValidHouseFields(ownerId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'ownerUid',
+          'name',
+          'currencyCode',
+          'businessTimeZone',
+          'schemaVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid',
+          'name',
+          'currencyCode',
+          'businessTimeZone',
+          'schemaVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerUid == ownerId
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.currencyCode == 'PHP'
+        && data.businessTimeZone == 'Asia/Manila'
+        && data.schemaVersion == 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function primaryHouseExistsAfter(uid) {
+      return existsAfter(
+        /databases/$(database)/documents/owners/$(uid)/boardingHouses/primary
+      );
+    }
+
+    function primaryHouseDoesNotExist(uid) {
+      return !exists(
+        /databases/$(database)/documents/owners/$(uid)/boardingHouses/primary
+      );
+    }
+
+    function profileExistsAfter(uid) {
+      return existsAfter(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function profileDoesNotExist(uid) {
+      return !exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function pairedHouseBelongsTo(uid) {
+      return primaryHouseExistsAfter(uid)
+        && getAfter(
+          /databases/$(database)/documents/owners/$(uid)/boardingHouses/primary
+        ).data.ownerUid == uid;
+    }
+
+    function pairedProfileSelectsPrimary(uid) {
+      return profileExistsAfter(uid)
+        && getAfter(
+          /databases/$(database)/documents/users/$(uid)
+        ).data.primaryHouseId == 'primary';
+    }
+
+    function isPrimaryHouseOwner(ownerId, houseId) {
+      return houseId == 'primary'
+        && isVerifiedSelf(ownerId)
+        && exists(
+          /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary
+        );
+    }
+
+    function isNonEmptyString(value, maximumLength) {
+      return value is string
+        && value.size() >= 1
+        && value.size() <= maximumLength;
+    }
+
+    function isOptionalString(value, maximumLength) {
+      return value == null
+        || (value is string && value.size() <= maximumLength);
+    }
+
+    function manilaToday() {
+      return (request.time + duration.value(8, 'h')).date();
+    }
+
+    function isDateOnly(value) {
+      return value is timestamp && value == value.date();
+    }
+
+    function isRecordedBusinessDate(value) {
+      return isDateOnly(value) && value <= manilaToday();
+    }
+
+    function roomBefore(ownerId, roomId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rooms/$(roomId)
+      ).data;
+    }
+
+    function roomAfter(ownerId, roomId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rooms/$(roomId)
+      ).data;
+    }
+
+    function boarderBefore(ownerId, boarderId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarders/$(boarderId)
+      ).data;
+    }
+
+    function boarderAfter(ownerId, boarderId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarders/$(boarderId)
+      ).data;
+    }
+
+    function occupancyBefore(ownerId, occupancyId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/occupancies/$(occupancyId)
+      ).data;
+    }
+
+    function occupancyAfter(ownerId, occupancyId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/occupancies/$(occupancyId)
+      ).data;
+    }
+
+    function occupancyDoesNotExist(ownerId, occupancyId) {
+      return !exists(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/occupancies/$(occupancyId)
+      );
+    }
+
+    function boarderDoesNotExist(ownerId, boarderId) {
+      return !exists(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarders/$(boarderId)
+      );
+    }
+
+    function isValidRoomData(roomId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'roomId',
+          'roomName',
+          'description',
+          'status',
+          'defaultMonthlyRentCentavos',
+          'activeOccupancyCount',
+          'lastOccupancyMutationId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId',
+          'roomName',
+          'description',
+          'status',
+          'defaultMonthlyRentCentavos',
+          'activeOccupancyCount',
+          'lastOccupancyMutationId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.roomId == roomId
+        && isNonEmptyString(data.roomName, 80)
+        && data.description is string
+        && data.description.size() <= 500
+        && data.status in ['active', 'inactive']
+        && (
+          data.defaultMonthlyRentCentavos == null
+          || (
+            data.defaultMonthlyRentCentavos is int
+            && data.defaultMonthlyRentCentavos >= 0
+          )
+        )
+        && data.activeOccupancyCount is int
+        && data.activeOccupancyCount >= 0
+        && (
+          data.lastOccupancyMutationId == null
+          || isNonEmptyString(data.lastOccupancyMutationId, 128)
+        )
+        && (data.status == 'active' || data.activeOccupancyCount == 0)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isRoomMetadataUpdate() {
+      return request.resource.data.activeOccupancyCount
+          == resource.data.activeOccupancyCount
+        && request.resource.data.lastOccupancyMutationId
+          == resource.data.lastOccupancyMutationId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'roomName',
+          'description',
+          'status',
+          'defaultMonthlyRentCentavos',
+          'updatedAt'
+        ]);
+    }
+
+    function isRoomOccupancyCountUpdate(ownerId, roomId) {
+      let mutationId = request.resource.data.lastOccupancyMutationId;
+      return request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'activeOccupancyCount',
+          'lastOccupancyMutationId',
+          'updatedAt'
+        ])
+        && isNonEmptyString(mutationId, 128)
+        && (
+          (
+          request.resource.data.activeOccupancyCount
+              == resource.data.activeOccupancyCount + 1
+            && occupancyDoesNotExist(ownerId, mutationId)
+            && occupancyAfter(ownerId, mutationId).roomId == roomId
+            && occupancyAfter(ownerId, mutationId).moveOutDate == null
+          )
+          || (
+            request.resource.data.activeOccupancyCount
+              == resource.data.activeOccupancyCount - 1
+            && occupancyBefore(ownerId, mutationId).roomId == roomId
+            && occupancyBefore(ownerId, mutationId).moveOutDate == null
+            && occupancyAfter(ownerId, mutationId).moveOutDate is timestamp
+          )
+        );
+    }
+
+    function isActiveBoarder(data) {
+      return data.status == 'active'
+        && isNonEmptyString(data.currentOccupancyId, 128)
+        && isNonEmptyString(data.currentRoomId, 128)
+        && isRecordedBusinessDate(data.currentMoveInDate)
+        && (
+          data.lastMoveOutDate == null
+          || (
+            isRecordedBusinessDate(data.lastMoveOutDate)
+            && data.currentMoveInDate >= data.lastMoveOutDate
+          )
+        );
+    }
+
+    function isMovedOutBoarder(data) {
+      return data.status == 'movedOut'
+        && data.currentOccupancyId == null
+        && data.currentRoomId == null
+        && data.currentMoveInDate == null
+        && isRecordedBusinessDate(data.lastMoveOutDate);
+    }
+
+    function isInactiveBoarder(data) {
+      return data.status == 'inactive'
+        && data.currentOccupancyId == null
+        && data.currentRoomId == null
+        && data.currentMoveInDate == null
+        && (
+          data.lastMoveOutDate == null
+          || (
+            isRecordedBusinessDate(data.lastMoveOutDate)
+          )
+        );
+    }
+
+    function isValidBoarderData(boarderId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'boarderId',
+          'fullName',
+          'contact',
+          'notes',
+          'status',
+          'currentOccupancyId',
+          'currentRoomId',
+          'currentMoveInDate',
+          'lastMoveOutDate',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'boarderId',
+          'fullName',
+          'contact',
+          'notes',
+          'status',
+          'currentOccupancyId',
+          'currentRoomId',
+          'currentMoveInDate',
+          'lastMoveOutDate',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.boarderId == boarderId
+        && isNonEmptyString(data.fullName, 120)
+        && isOptionalString(data.contact, 120)
+        && isOptionalString(data.notes, 1000)
+        && data.status in ['active', 'movedOut', 'inactive']
+        && (
+          isActiveBoarder(data)
+          || isMovedOutBoarder(data)
+          || isInactiveBoarder(data)
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOccupancyData(occupancyId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'occupancyId',
+          'boarderId',
+          'roomId',
+          'moveInDate',
+          'moveOutDate',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'occupancyId',
+          'boarderId',
+          'roomId',
+          'moveInDate',
+          'moveOutDate',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.occupancyId == occupancyId
+        && isNonEmptyString(data.boarderId, 128)
+        && isNonEmptyString(data.roomId, 128)
+        && isRecordedBusinessDate(data.moveInDate)
+        && (
+          data.moveOutDate == null
+          || (
+            isRecordedBusinessDate(data.moveOutDate)
+            && data.moveOutDate > data.moveInDate
+          )
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isAtomicActiveBoarderCreation(ownerId, boarderId) {
+      let after = request.resource.data;
+      let occupancy = occupancyAfter(ownerId, after.currentOccupancyId);
+      let previousRoom = roomBefore(ownerId, after.currentRoomId);
+      let nextRoom = roomAfter(ownerId, after.currentRoomId);
+      return after.status == 'active'
+        && after.lastMoveOutDate == null
+        && occupancyDoesNotExist(ownerId, after.currentOccupancyId)
+        && occupancy.occupancyId == after.currentOccupancyId
+        && occupancy.boarderId == boarderId
+        && occupancy.roomId == after.currentRoomId
+        && occupancy.moveInDate == after.currentMoveInDate
+        && occupancy.moveOutDate == null
+        && previousRoom.status == 'active'
+        && nextRoom.status == 'active'
+        && nextRoom.activeOccupancyCount
+          == previousRoom.activeOccupancyCount + 1;
+    }
+
+    function isInactiveBoarderCreation() {
+      let after = request.resource.data;
+      return after.status == 'inactive'
+        && after.currentOccupancyId == null
+        && after.currentRoomId == null
+        && after.currentMoveInDate == null
+        && after.lastMoveOutDate == null;
+    }
+
+    function isBoarderMetadataUpdate() {
+      return request.resource.data.status == resource.data.status
+        && request.resource.data.currentOccupancyId
+          == resource.data.currentOccupancyId
+        && request.resource.data.currentRoomId == resource.data.currentRoomId
+        && request.resource.data.currentMoveInDate
+          == resource.data.currentMoveInDate
+        && request.resource.data.lastMoveOutDate
+          == resource.data.lastMoveOutDate
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName',
+          'contact',
+          'notes',
+          'updatedAt'
+        ]);
+    }
+
+    function isBoarderDeactivation() {
+      return resource.data.status == 'movedOut'
+        && request.resource.data.status == 'inactive'
+        && request.resource.data.currentOccupancyId == null
+        && request.resource.data.currentRoomId == null
+        && request.resource.data.currentMoveInDate == null
+        && request.resource.data.lastMoveOutDate
+          == resource.data.lastMoveOutDate
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'updatedAt'
+        ]);
+    }
+
+    function isAtomicBoarderMoveIn(ownerId, boarderId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let occupancy = occupancyAfter(ownerId, after.currentOccupancyId);
+      let previousRoom = roomBefore(ownerId, after.currentRoomId);
+      let nextRoom = roomAfter(ownerId, after.currentRoomId);
+      return before.status in ['movedOut', 'inactive']
+        && before.currentOccupancyId == null
+        && before.currentRoomId == null
+        && before.currentMoveInDate == null
+        && after.status == 'active'
+        && after.lastMoveOutDate == before.lastMoveOutDate
+        && (
+          before.lastMoveOutDate == null
+          || after.currentMoveInDate >= before.lastMoveOutDate
+        )
+        && occupancyDoesNotExist(ownerId, after.currentOccupancyId)
+        && occupancy.occupancyId == after.currentOccupancyId
+        && occupancy.boarderId == boarderId
+        && occupancy.roomId == after.currentRoomId
+        && occupancy.moveInDate == after.currentMoveInDate
+        && occupancy.moveOutDate == null
+        && previousRoom.status == 'active'
+        && nextRoom.status == 'active'
+        && nextRoom.activeOccupancyCount
+          == previousRoom.activeOccupancyCount + 1
+        && after.diff(before).affectedKeys().hasOnly([
+          'status',
+          'currentOccupancyId',
+          'currentRoomId',
+          'currentMoveInDate',
+          'updatedAt'
+        ]);
+    }
+
+    function isAtomicBoarderMoveOut(ownerId, boarderId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let occupancy = occupancyBefore(ownerId, before.currentOccupancyId);
+      let closedOccupancy = occupancyAfter(ownerId, before.currentOccupancyId);
+      let previousRoom = roomBefore(ownerId, before.currentRoomId);
+      let nextRoom = roomAfter(ownerId, before.currentRoomId);
+      return before.status == 'active'
+        && after.status == 'movedOut'
+        && after.currentOccupancyId == null
+        && after.currentRoomId == null
+        && after.currentMoveInDate == null
+        && occupancy.occupancyId == before.currentOccupancyId
+        && occupancy.boarderId == boarderId
+        && occupancy.roomId == before.currentRoomId
+        && occupancy.moveInDate == before.currentMoveInDate
+        && occupancy.moveOutDate == null
+        && closedOccupancy.moveOutDate == after.lastMoveOutDate
+        && closedOccupancy.moveOutDate > occupancy.moveInDate
+        && nextRoom.activeOccupancyCount
+          == previousRoom.activeOccupancyCount - 1
+        && after.diff(before).affectedKeys().hasOnly([
+          'status',
+          'currentOccupancyId',
+          'currentRoomId',
+          'currentMoveInDate',
+          'lastMoveOutDate',
+          'updatedAt'
+        ]);
+    }
+
+    function isAtomicBoarderTransfer(ownerId, boarderId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let occupancy = occupancyBefore(ownerId, before.currentOccupancyId);
+      let closedOccupancy = occupancyAfter(ownerId, before.currentOccupancyId);
+      let newOccupancy = occupancyAfter(ownerId, after.currentOccupancyId);
+      let previousOldRoom = roomBefore(ownerId, before.currentRoomId);
+      let nextOldRoom = roomAfter(ownerId, before.currentRoomId);
+      let previousNewRoom = roomBefore(ownerId, after.currentRoomId);
+      let nextNewRoom = roomAfter(ownerId, after.currentRoomId);
+      return before.status == 'active'
+        && after.status == 'active'
+        && after.currentOccupancyId != before.currentOccupancyId
+        && after.currentRoomId != before.currentRoomId
+        && occupancy.occupancyId == before.currentOccupancyId
+        && occupancy.boarderId == boarderId
+        && occupancy.roomId == before.currentRoomId
+        && occupancy.moveInDate == before.currentMoveInDate
+        && occupancy.moveOutDate == null
+        && closedOccupancy.moveOutDate == after.currentMoveInDate
+        && after.lastMoveOutDate == after.currentMoveInDate
+        && occupancyDoesNotExist(ownerId, after.currentOccupancyId)
+        && newOccupancy.occupancyId == after.currentOccupancyId
+        && newOccupancy.boarderId == boarderId
+        && newOccupancy.roomId == after.currentRoomId
+        && newOccupancy.moveInDate == after.currentMoveInDate
+        && newOccupancy.moveOutDate == null
+        && previousNewRoom.status == 'active'
+        && nextNewRoom.status == 'active'
+        && nextOldRoom.activeOccupancyCount
+          == previousOldRoom.activeOccupancyCount - 1
+        && nextNewRoom.activeOccupancyCount
+          == previousNewRoom.activeOccupancyCount + 1
+        && after.diff(before).affectedKeys().hasOnly([
+          'currentOccupancyId',
+          'currentRoomId',
+          'currentMoveInDate',
+          'lastMoveOutDate',
+          'updatedAt'
+        ]);
+    }
+
+    function newOccupancyMatchesAfterState(ownerId, occupancyId) {
+      let occupancy = request.resource.data;
+      let boarder = boarderAfter(ownerId, occupancy.boarderId);
+      let previousRoom = roomBefore(ownerId, occupancy.roomId);
+      let nextRoom = roomAfter(ownerId, occupancy.roomId);
+      return occupancy.moveOutDate == null
+        && boarder.status == 'active'
+        && boarder.currentOccupancyId == occupancyId
+        && boarder.currentRoomId == occupancy.roomId
+        && boarder.currentMoveInDate == occupancy.moveInDate
+        && previousRoom.status == 'active'
+        && nextRoom.status == 'active'
+        && nextRoom.activeOccupancyCount
+          == previousRoom.activeOccupancyCount + 1;
+    }
+
+    function isInitialOccupancyCreation(ownerId) {
+      let occupancy = request.resource.data;
+      let boarder = boarderAfter(ownerId, occupancy.boarderId);
+      return boarderDoesNotExist(ownerId, occupancy.boarderId)
+        && boarder.boarderId == occupancy.boarderId
+        && boarder.lastMoveOutDate == null
+        && boarder.createdAt == request.time;
+    }
+
+    function isLaterMoveInOccupancyCreation(ownerId) {
+      let occupancy = request.resource.data;
+      let before = boarderBefore(ownerId, occupancy.boarderId);
+      let after = boarderAfter(ownerId, occupancy.boarderId);
+      return before.status in ['movedOut', 'inactive']
+        && before.currentOccupancyId == null
+        && before.currentRoomId == null
+        && before.currentMoveInDate == null
+        && after.lastMoveOutDate == before.lastMoveOutDate
+        && (
+          before.lastMoveOutDate == null
+          || occupancy.moveInDate >= before.lastMoveOutDate
+        );
+    }
+
+    function isTransferOccupancyCreation(ownerId, occupancyId) {
+      let occupancy = request.resource.data;
+      let before = boarderBefore(ownerId, occupancy.boarderId);
+      let after = boarderAfter(ownerId, occupancy.boarderId);
+      let oldOccupancy = occupancyBefore(ownerId, before.currentOccupancyId);
+      let closedOccupancy = occupancyAfter(ownerId, before.currentOccupancyId);
+      let previousOldRoom = roomBefore(ownerId, before.currentRoomId);
+      let nextOldRoom = roomAfter(ownerId, before.currentRoomId);
+      return before.status == 'active'
+        && before.currentOccupancyId != occupancyId
+        && before.currentRoomId != occupancy.roomId
+        && oldOccupancy.boarderId == occupancy.boarderId
+        && oldOccupancy.roomId == before.currentRoomId
+        && oldOccupancy.moveInDate == before.currentMoveInDate
+        && oldOccupancy.moveOutDate == null
+        && closedOccupancy.moveOutDate == occupancy.moveInDate
+        && after.lastMoveOutDate == occupancy.moveInDate
+        && nextOldRoom.activeOccupancyCount
+          == previousOldRoom.activeOccupancyCount - 1;
+    }
+
+    function isAtomicOccupancyCloseForMoveOut(ownerId, occupancyId) {
+      let occupancy = resource.data;
+      let closedOccupancy = request.resource.data;
+      let before = boarderBefore(ownerId, occupancy.boarderId);
+      let after = boarderAfter(ownerId, occupancy.boarderId);
+      let previousRoom = roomBefore(ownerId, occupancy.roomId);
+      let nextRoom = roomAfter(ownerId, occupancy.roomId);
+      return before.status == 'active'
+        && before.currentOccupancyId == occupancyId
+        && before.currentRoomId == occupancy.roomId
+        && before.currentMoveInDate == occupancy.moveInDate
+        && after.status == 'movedOut'
+        && after.currentOccupancyId == null
+        && after.currentRoomId == null
+        && after.currentMoveInDate == null
+        && after.lastMoveOutDate == closedOccupancy.moveOutDate
+        && nextRoom.activeOccupancyCount
+          == previousRoom.activeOccupancyCount - 1;
+    }
+
+    function isAtomicOccupancyCloseForTransfer(ownerId, occupancyId) {
+      let occupancy = resource.data;
+      let closedOccupancy = request.resource.data;
+      let before = boarderBefore(ownerId, occupancy.boarderId);
+      let after = boarderAfter(ownerId, occupancy.boarderId);
+      let newOccupancy = occupancyAfter(ownerId, after.currentOccupancyId);
+      let previousOldRoom = roomBefore(ownerId, occupancy.roomId);
+      let nextOldRoom = roomAfter(ownerId, occupancy.roomId);
+      let previousNewRoom = roomBefore(ownerId, after.currentRoomId);
+      let nextNewRoom = roomAfter(ownerId, after.currentRoomId);
+      return before.status == 'active'
+        && before.currentOccupancyId == occupancyId
+        && before.currentRoomId == occupancy.roomId
+        && before.currentMoveInDate == occupancy.moveInDate
+        && after.status == 'active'
+        && after.currentOccupancyId != occupancyId
+        && after.currentRoomId != occupancy.roomId
+        && after.currentMoveInDate == closedOccupancy.moveOutDate
+        && after.lastMoveOutDate == closedOccupancy.moveOutDate
+        && newOccupancy.occupancyId == after.currentOccupancyId
+        && newOccupancy.boarderId == occupancy.boarderId
+        && newOccupancy.roomId == after.currentRoomId
+        && newOccupancy.moveInDate == closedOccupancy.moveOutDate
+        && newOccupancy.moveOutDate == null
+        && previousNewRoom.status == 'active'
+        && nextNewRoom.status == 'active'
+        && nextOldRoom.activeOccupancyCount
+          == previousOldRoom.activeOccupancyCount - 1
+        && nextNewRoom.activeOccupancyCount
+          == previousNewRoom.activeOccupancyCount + 1;
+    }
+
+    function roomMeterStateBefore(ownerId, roomId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomMeterStates/$(roomId)
+      ).data;
+    }
+
+    function roomMeterStateAfter(ownerId, roomId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomMeterStates/$(roomId)
+      ).data;
+    }
+
+    function electricityMeterBefore(ownerId, meterId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityMeters/$(meterId)
+      ).data;
+    }
+
+    function electricityMeterAfter(ownerId, meterId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityMeters/$(meterId)
+      ).data;
+    }
+
+    function meterReadingAfter(ownerId, readingId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/meterReadings/$(readingId)
+      ).data;
+    }
+
+    function meterReadingBefore(ownerId, readingId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/meterReadings/$(readingId)
+      ).data;
+    }
+
+    function meterReadingCorrectionAfter(ownerId, correctionId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/meterReadingCorrections/$(correctionId)
+      ).data;
+    }
+
+    function meterReadingInsertionAfter(ownerId, insertionId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/meterReadingInsertions/$(insertionId)
+      ).data;
+    }
+
+    function electricityBillingRecordAfter(ownerId, recordId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBillingRecords/$(recordId)
+      ).data;
+    }
+
+    function electricityReadingBatchAfter(ownerId, batchId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityReadingBatches/$(batchId)
+      ).data;
+    }
+
+    function electricityBatchReadingLinkAfter(ownerId, linkId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBatchReadingLinks/$(linkId)
+      ).data;
+    }
+
+    function electricityBatchVoidAfter(ownerId, voidId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBatchVoids/$(voidId)
+      ).data;
+    }
+
+    function waterBillingBatchAfter(ownerId, batchId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/waterBillingBatches/$(batchId)
+      ).data;
+    }
+
+    function waterBillingBatchVoidAfter(ownerId, voidId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/waterBillingBatchVoids/$(voidId)
+      ).data;
+    }
+
+    function utilityBillingBatchAfter(ownerId, billingBatchId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/utilityBillingBatches/$(billingBatchId)
+      ).data;
+    }
+
+    function utilityBillingBatchBefore(ownerId, billingBatchId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/utilityBillingBatches/$(billingBatchId)
+      ).data;
+    }
+
+    function utilityRoomBillAccountBefore(ownerId, accountId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/utilityRoomBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function utilityRoomBillAccountAfter(ownerId, accountId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/utilityRoomBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function utilityRoomPaymentAfter(ownerId, paymentId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/utilityRoomPayments/$(paymentId)
+      ).data;
+    }
+
+    function roomExists(ownerId, roomId) {
+      return exists(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rooms/$(roomId)
+      );
+    }
+
+    function isValidRoomMeterState(data, roomId) {
+      return data.keys().hasAll([
+          'roomId',
+          'currentMeterId',
+          'lastTransitionId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId',
+          'currentMeterId',
+          'lastTransitionId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.roomId == roomId
+        && isNonEmptyString(data.currentMeterId, 128)
+        && isNonEmptyString(data.lastTransitionId, 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidElectricityMeter(data, meterId) {
+      return data.keys().hasAll([
+          'meterId',
+          'roomId',
+          'sequenceNumber',
+          'status',
+          'startedOn',
+          'endedOn',
+          'startKind',
+          'transitionReason',
+          'previousMeterId',
+          'replacementMeterId',
+          'lastReadingId',
+          'lastReadingDate',
+          'lastReadingWh',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'meterId',
+          'roomId',
+          'sequenceNumber',
+          'status',
+          'startedOn',
+          'endedOn',
+          'startKind',
+          'transitionReason',
+          'previousMeterId',
+          'replacementMeterId',
+          'lastReadingId',
+          'lastReadingDate',
+          'lastReadingWh',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.meterId == meterId
+        && isNonEmptyString(data.roomId, 128)
+        && data.sequenceNumber is int
+        && data.sequenceNumber >= 1
+        && data.sequenceNumber <= 1000000
+        && data.status in ['active', 'retired']
+        && isRecordedBusinessDate(data.startedOn)
+        && data.startKind in ['initial', 'reset', 'replacement', 'correction']
+        && isOptionalString(data.transitionReason, 500)
+        && isOptionalString(data.previousMeterId, 128)
+        && isOptionalString(data.replacementMeterId, 128)
+        && isNonEmptyString(data.lastReadingId, 128)
+        && isRecordedBusinessDate(data.lastReadingDate)
+        && data.lastReadingDate >= data.startedOn
+        && data.lastReadingWh is int
+        && data.lastReadingWh >= 0
+        && data.lastReadingWh <= 1000000000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          (
+            data.status == 'active'
+            && data.endedOn == null
+            && data.replacementMeterId == null
+          )
+          || (
+            data.status == 'retired'
+            && isRecordedBusinessDate(data.endedOn)
+            && data.endedOn >= data.startedOn
+            && isNonEmptyString(data.replacementMeterId, 128)
+          )
+        );
+    }
+
+    function isValidMeterReading(data, readingId) {
+      return data.keys().hasAll([
+          'readingId',
+          'meterId',
+          'roomId',
+          'sequenceNumber',
+          'readingDate',
+          'readingWh',
+          'kind',
+          'previousReadingId',
+          'previousReadingDate',
+          'previousReadingWh',
+          'consumptionWh',
+          'note',
+          'billingRecordIds',
+          'correctionCount',
+          'lastCorrectionId',
+          'lastCorrectedAt',
+          'lastCorrectedBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'readingId',
+          'meterId',
+          'roomId',
+          'sequenceNumber',
+          'readingDate',
+          'readingWh',
+          'kind',
+          'previousReadingId',
+          'previousReadingDate',
+          'previousReadingWh',
+          'consumptionWh',
+          'note',
+          'billingRecordIds',
+          'correctionCount',
+          'lastCorrectionId',
+          'lastCorrectedAt',
+          'lastCorrectedBy',
+          'createdAt'
+        ])
+        && data.readingId == readingId
+        && isNonEmptyString(data.meterId, 128)
+        && isNonEmptyString(data.roomId, 128)
+        && data.sequenceNumber is int
+        && data.sequenceNumber >= 1
+        && data.sequenceNumber <= 1000000
+        && isRecordedBusinessDate(data.readingDate)
+        && data.readingWh is int
+        && data.readingWh >= 0
+        && data.readingWh <= 1000000000000
+        && data.kind in ['opening', 'regular', 'intermediate', 'closing']
+        && isOptionalString(data.previousReadingId, 128)
+        && (
+          data.previousReadingDate == null
+          || isRecordedBusinessDate(data.previousReadingDate)
+        )
+        && (
+          data.previousReadingWh == null
+          || (
+            data.previousReadingWh is int
+            && data.previousReadingWh >= 0
+            && data.previousReadingWh <= 1000000000000
+          )
+        )
+        && data.consumptionWh is int
+        && data.consumptionWh >= 0
+        && data.consumptionWh <= 1000000000000
+        && isOptionalString(data.note, 500)
+        && data.billingRecordIds is list
+        && data.billingRecordIds.size() <= 100
+        && data.correctionCount is int
+        && data.correctionCount >= 0
+        && data.correctionCount <= 1000
+        && isOptionalString(data.lastCorrectionId, 128)
+        && (
+          data.lastCorrectedAt == null
+          || data.lastCorrectedAt is timestamp
+        )
+        && isOptionalString(data.lastCorrectedBy, 128)
+        && (
+          (
+            data.correctionCount == 0
+            && data.lastCorrectionId == null
+            && data.lastCorrectedAt == null
+            && data.lastCorrectedBy == null
+          )
+          || (
+            data.correctionCount > 0
+            && isNonEmptyString(data.lastCorrectionId, 128)
+            && data.lastCorrectedAt is timestamp
+            && isNonEmptyString(data.lastCorrectedBy, 128)
+          )
+        )
+        && data.createdAt is timestamp
+        && (
+          (
+            data.kind == 'opening'
+            && data.previousReadingId == null
+            && data.previousReadingDate == null
+            && data.previousReadingWh == null
+            && data.consumptionWh == 0
+          )
+          || (
+            data.kind in ['regular', 'intermediate', 'closing']
+            && isNonEmptyString(data.previousReadingId, 128)
+            && isRecordedBusinessDate(data.previousReadingDate)
+            && data.previousReadingWh is int
+            && data.readingDate > data.previousReadingDate
+            && data.readingWh >= data.previousReadingWh
+            && data.consumptionWh
+              == data.readingWh - data.previousReadingWh
+          )
+        );
+    }
+
+    function isValidMeterReadingCorrectionVersion(data) {
+      return data.keys().hasAll([
+          'readingDate',
+          'readingWh',
+          'consumptionWh',
+          'meterStartedOn',
+          'meterLastReadingDate',
+          'meterLastReadingWh'
+        ])
+        && data.keys().hasOnly([
+          'readingDate',
+          'readingWh',
+          'consumptionWh',
+          'meterStartedOn',
+          'meterLastReadingDate',
+          'meterLastReadingWh'
+        ])
+        && isRecordedBusinessDate(data.readingDate)
+        && data.readingWh is int
+        && data.readingWh >= 0
+        && data.readingWh <= 1000000000000
+        && data.consumptionWh is int
+        && data.consumptionWh >= 0
+        && data.consumptionWh <= 1000000000000
+        && isRecordedBusinessDate(data.meterStartedOn)
+        && isRecordedBusinessDate(data.meterLastReadingDate)
+        && data.meterLastReadingWh is int
+        && data.meterLastReadingWh >= 0
+        && data.meterLastReadingWh <= 1000000000000;
+    }
+
+    function isValidMeterReadingCorrection(
+      data,
+      correctionId,
+      ownerId
+    ) {
+      return data.keys().hasAll([
+          'correctionId',
+          'ownerId',
+          'roomId',
+          'meterId',
+          'readingId',
+          'sequenceNumber',
+          'kind',
+          'before',
+          'after',
+          'reason',
+          'correctedBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'correctionId',
+          'ownerId',
+          'roomId',
+          'meterId',
+          'readingId',
+          'sequenceNumber',
+          'kind',
+          'before',
+          'after',
+          'reason',
+          'correctedBy',
+          'createdAt'
+        ])
+        && data.correctionId == correctionId
+        && data.ownerId == ownerId
+        && isNonEmptyString(data.roomId, 128)
+        && isNonEmptyString(data.meterId, 128)
+        && isNonEmptyString(data.readingId, 128)
+        && data.sequenceNumber is int
+        && data.sequenceNumber >= 1
+        && data.sequenceNumber <= 1000000
+        && data.kind in ['opening', 'regular', 'intermediate']
+        && isValidMeterReadingCorrectionVersion(data.before)
+        && isValidMeterReadingCorrectionVersion(data.after)
+        && isNonEmptyString(data.reason, 500)
+        && data.reason.size() >= 3
+        && data.correctedBy == ownerId
+        && data.createdAt == request.time;
+    }
+
+    function isValidMeterReadingInsertion(data, insertionId, ownerId) {
+      return data.keys().hasAll([
+          'insertionId',
+          'ownerId',
+          'roomId',
+          'meterId',
+          'insertedReadingId',
+          'predecessorReadingId',
+          'successorReadingId',
+          'readingDate',
+          'readingWh',
+          'reason',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'insertionId',
+          'ownerId',
+          'roomId',
+          'meterId',
+          'insertedReadingId',
+          'predecessorReadingId',
+          'successorReadingId',
+          'readingDate',
+          'readingWh',
+          'reason',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.insertionId == insertionId
+        && data.insertedReadingId == insertionId
+        && data.ownerId == ownerId
+        && data.createdBy == ownerId
+        && isNonEmptyString(data.roomId, 128)
+        && isNonEmptyString(data.meterId, 128)
+        && isNonEmptyString(data.predecessorReadingId, 128)
+        && isNonEmptyString(data.successorReadingId, 128)
+        && isRecordedBusinessDate(data.readingDate)
+        && data.readingWh is int
+        && data.readingWh >= 0
+        && data.readingWh <= 1000000000000
+        && isNonEmptyString(data.reason, 500)
+        && data.reason.size() >= 3
+        && data.createdAt == request.time;
+    }
+
+    function isAtomicHistoricalReadingInsertion(
+      ownerId,
+      insertedReadingId
+    ) {
+      let inserted = meterReadingAfter(ownerId, insertedReadingId);
+      let insertion = meterReadingInsertionAfter(ownerId, insertedReadingId);
+      let predecessor = meterReadingBefore(
+        ownerId,
+        insertion.predecessorReadingId
+      );
+      let successorBefore = meterReadingBefore(
+        ownerId,
+        insertion.successorReadingId
+      );
+      let successorAfter = meterReadingAfter(
+        ownerId,
+        insertion.successorReadingId
+      );
+      let meter = electricityMeterBefore(ownerId, insertion.meterId);
+      let state = roomMeterStateBefore(ownerId, insertion.roomId);
+      return insertion.insertedReadingId == insertedReadingId
+        && insertion.ownerId == ownerId
+        && insertion.roomId == inserted.roomId
+        && insertion.meterId == inserted.meterId
+        && insertion.readingDate == inserted.readingDate
+        && insertion.readingWh == inserted.readingWh
+        && meter.status == 'active'
+        && meter.roomId == insertion.roomId
+        && state.currentMeterId == insertion.meterId
+        && predecessor.readingId == insertion.predecessorReadingId
+        && successorBefore.readingId == insertion.successorReadingId
+        && predecessor.meterId == insertion.meterId
+        && successorBefore.meterId == insertion.meterId
+        && predecessor.roomId == insertion.roomId
+        && successorBefore.roomId == insertion.roomId
+        && predecessor.sequenceNumber == successorBefore.sequenceNumber
+        && inserted.sequenceNumber == predecessor.sequenceNumber
+        && predecessor.billingRecordIds is list
+        && predecessor.billingRecordIds.size() == 0
+        && successorBefore.billingRecordIds is list
+        && successorBefore.billingRecordIds.size() == 0
+        && inserted.billingRecordIds.size() == 0
+        && successorBefore.previousReadingId == predecessor.readingId
+        && successorBefore.previousReadingDate == predecessor.readingDate
+        && successorBefore.previousReadingWh == predecessor.readingWh
+        && inserted.kind == 'intermediate'
+        && inserted.previousReadingId == predecessor.readingId
+        && inserted.previousReadingDate == predecessor.readingDate
+        && inserted.previousReadingWh == predecessor.readingWh
+        && inserted.readingDate > predecessor.readingDate
+        && inserted.readingDate < successorBefore.readingDate
+        && inserted.readingWh >= predecessor.readingWh
+        && inserted.readingWh <= successorBefore.readingWh
+        && inserted.consumptionWh
+          == inserted.readingWh - predecessor.readingWh
+        && inserted.note == insertion.reason
+        && inserted.createdAt == request.time
+        && successorAfter.previousReadingId == insertedReadingId
+        && successorAfter.previousReadingDate == inserted.readingDate
+        && successorAfter.previousReadingWh == inserted.readingWh
+        && successorAfter.consumptionWh
+          == successorAfter.readingWh - inserted.readingWh
+        && successorAfter.diff(successorBefore).affectedKeys().hasOnly([
+          'previousReadingId',
+          'previousReadingDate',
+          'previousReadingWh',
+          'consumptionWh'
+        ]);
+    }
+
+    function isHistoricalInsertionSuccessorWrite(ownerId, readingId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let inserted = meterReadingAfter(ownerId, after.previousReadingId);
+      let insertion = meterReadingInsertionAfter(
+        ownerId,
+        after.previousReadingId
+      );
+      return insertion.successorReadingId == readingId
+        && insertion.insertedReadingId == after.previousReadingId
+        && before.billingRecordIds is list
+        && before.billingRecordIds.size() == 0
+        && after.billingRecordIds == before.billingRecordIds
+        && before.previousReadingId == insertion.predecessorReadingId
+        && inserted.readingId == insertion.insertedReadingId
+        && inserted.createdAt == request.time
+        && after.previousReadingDate == inserted.readingDate
+        && after.previousReadingWh == inserted.readingWh
+        && after.consumptionWh == after.readingWh - inserted.readingWh
+        && after.diff(before).affectedKeys().hasOnly([
+          'previousReadingId',
+          'previousReadingDate',
+          'previousReadingWh',
+          'consumptionWh'
+        ]);
+    }
+
+    function isHistoricalInsertionAuditCreate(ownerId, insertionId) {
+      let insertion = request.resource.data;
+      let inserted = meterReadingAfter(ownerId, insertionId);
+      let predecessor = meterReadingBefore(
+        ownerId,
+        insertion.predecessorReadingId
+      );
+      let successorBefore = meterReadingBefore(
+        ownerId,
+        insertion.successorReadingId
+      );
+      let successorAfter = meterReadingAfter(
+        ownerId,
+        insertion.successorReadingId
+      );
+      return inserted.readingId == insertionId
+        && inserted.createdAt == request.time
+        && inserted.roomId == insertion.roomId
+        && inserted.meterId == insertion.meterId
+        && inserted.readingDate == insertion.readingDate
+        && inserted.readingWh == insertion.readingWh
+        && inserted.previousReadingId == predecessor.readingId
+        && predecessor.readingId == insertion.predecessorReadingId
+        && predecessor.billingRecordIds.size() == 0
+        && successorBefore.readingId == insertion.successorReadingId
+        && successorBefore.billingRecordIds.size() == 0
+        && successorBefore.previousReadingId == predecessor.readingId
+        && successorAfter.previousReadingId == insertionId
+        && successorAfter.previousReadingDate == inserted.readingDate
+        && successorAfter.previousReadingWh == inserted.readingWh;
+    }
+
+    function correctionVersion(reading, meter) {
+      return {
+        'readingDate': reading.readingDate,
+        'readingWh': reading.readingWh,
+        'consumptionWh': reading.consumptionWh,
+        'meterStartedOn': meter.startedOn,
+        'meterLastReadingDate': meter.lastReadingDate,
+        'meterLastReadingWh': meter.lastReadingWh
+      };
+    }
+
+    function isAtomicReadingCorrection(
+      ownerId,
+      meterId,
+      readingId,
+      correctionId
+    ) {
+      let beforeReading = meterReadingBefore(ownerId, readingId);
+      let afterReading = meterReadingAfter(ownerId, readingId);
+      let beforeMeter = electricityMeterBefore(ownerId, meterId);
+      let afterMeter = electricityMeterAfter(ownerId, meterId);
+      let state = roomMeterStateAfter(ownerId, beforeReading.roomId);
+      let correction = meterReadingCorrectionAfter(ownerId, correctionId);
+      let regularReading = beforeReading.kind in ['regular', 'intermediate'];
+      let initialBaseline = beforeReading.kind == 'opening'
+        && beforeReading.sequenceNumber == 1
+        && beforeMeter.startKind == 'initial'
+        && beforeMeter.previousMeterId == null;
+      return beforeReading.meterId == meterId
+        && beforeReading.billingRecordIds is list
+        && beforeReading.billingRecordIds.size() == 0
+        && afterReading.lastCorrectionId == correctionId
+        && afterReading.lastCorrectedAt == request.time
+        && afterReading.lastCorrectedBy == ownerId
+        && beforeMeter.status == 'active'
+        && beforeMeter.roomId == beforeReading.roomId
+        && state.currentMeterId == meterId
+        && beforeMeter.lastReadingId == readingId
+        && beforeMeter.lastReadingDate == beforeReading.readingDate
+        && beforeMeter.lastReadingWh == beforeReading.readingWh
+        && afterMeter.updatedAt == request.time
+        && (
+          (
+            regularReading
+            && afterMeter.startedOn == beforeMeter.startedOn
+            && afterReading.readingDate > beforeReading.previousReadingDate
+            && afterReading.readingWh >= beforeReading.previousReadingWh
+            && afterReading.consumptionWh
+              == afterReading.readingWh - beforeReading.previousReadingWh
+          )
+          || (
+            initialBaseline
+            && afterReading.consumptionWh == 0
+            && beforeMeter.startedOn == beforeReading.readingDate
+            && afterMeter.startedOn == afterReading.readingDate
+          )
+        )
+        && correction.roomId == beforeReading.roomId
+        && correction.meterId == meterId
+        && correction.readingId == readingId
+        && correction.sequenceNumber == beforeReading.sequenceNumber
+        && correction.kind == beforeReading.kind
+        && correction.before == correctionVersion(beforeReading, beforeMeter)
+        && correction.after == correctionVersion(afterReading, afterMeter);
+    }
+
+    function isCorrectionReadingWrite(ownerId, readingId) {
+      let beforeReading = resource.data;
+      let afterReading = request.resource.data;
+      let afterMeter = electricityMeterAfter(ownerId, afterReading.meterId);
+      let correction = meterReadingCorrectionAfter(
+        ownerId,
+        afterReading.lastCorrectionId
+      );
+      return afterReading.diff(beforeReading).affectedKeys().hasOnly([
+          'readingDate',
+          'readingWh',
+          'consumptionWh',
+          'correctionCount',
+          'lastCorrectionId',
+          'lastCorrectedAt',
+          'lastCorrectedBy'
+        ])
+        && beforeReading.billingRecordIds is list
+        && beforeReading.billingRecordIds.size() == 0
+        && afterReading.correctionCount == beforeReading.correctionCount + 1
+        && isNonEmptyString(afterReading.lastCorrectionId, 128)
+        && afterReading.lastCorrectedAt == request.time
+        && afterReading.lastCorrectedBy == ownerId
+        && (
+          afterReading.readingDate != beforeReading.readingDate
+          || afterReading.readingWh != beforeReading.readingWh
+        )
+        && afterMeter.lastReadingId == readingId
+        && afterMeter.lastReadingDate == afterReading.readingDate
+        && afterMeter.lastReadingWh == afterReading.readingWh
+        && afterMeter.updatedAt == request.time
+        && correction.correctionId == afterReading.lastCorrectionId
+        && correction.readingId == readingId
+        && correction.createdAt == request.time;
+    }
+
+    function isCorrectionMeterWrite(ownerId, meterId) {
+      let beforeMeter = resource.data;
+      let afterMeter = request.resource.data;
+      let afterReading = meterReadingAfter(ownerId, afterMeter.lastReadingId);
+      let correction = meterReadingCorrectionAfter(
+        ownerId,
+        afterReading.lastCorrectionId
+      );
+      return beforeMeter.status == 'active'
+        && afterMeter.status == 'active'
+        && afterMeter.lastReadingId == beforeMeter.lastReadingId
+        && afterMeter.diff(beforeMeter).affectedKeys().hasOnly([
+          'startedOn',
+          'lastReadingDate',
+          'lastReadingWh',
+          'updatedAt'
+        ])
+        && afterMeter.updatedAt == request.time
+        && afterReading.meterId == meterId
+        && afterReading.lastCorrectedAt == request.time
+        && afterReading.lastCorrectedBy == ownerId
+        && afterMeter.lastReadingDate == afterReading.readingDate
+        && afterMeter.lastReadingWh == afterReading.readingWh
+        && correction.correctionId == afterReading.lastCorrectionId
+        && correction.meterId == meterId
+        && correction.createdAt == request.time;
+    }
+
+    function isBillingLockOnlyUpdate(ownerId, readingId) {
+      let beforeLocks = resource.data.billingRecordIds;
+      let afterLocks = request.resource.data.billingRecordIds;
+      let recordId = afterLocks[afterLocks.size() - 1];
+      let record = electricityBillingRecordAfter(ownerId, recordId);
+      return beforeLocks is list
+        && afterLocks is list
+        && afterLocks.size() == beforeLocks.size() + 1
+        && afterLocks.hasAll(beforeLocks)
+        && isNonEmptyString(recordId, 128)
+        && !(recordId in beforeLocks)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'billingRecordIds'
+        ])
+        && record.recordId == recordId
+        && record.sourceReadingIds is list
+        && record.sourceReadingIds.hasAny([readingId]);
+    }
+
+    function isAtomicInitialMeterGraph(ownerId, roomId, meterId) {
+      let state = roomMeterStateAfter(ownerId, roomId);
+      let meter = electricityMeterAfter(ownerId, meterId);
+      let opening = meterReadingAfter(ownerId, meter.lastReadingId);
+      return roomExists(ownerId, roomId)
+        && state.roomId == roomId
+        && state.currentMeterId == meterId
+        && state.lastTransitionId == meterId
+        && meter.roomId == roomId
+        && meter.sequenceNumber == 1
+        && meter.status == 'active'
+        && meter.startKind == 'initial'
+        && meter.transitionReason == null
+        && meter.previousMeterId == null
+        && meter.replacementMeterId == null
+        && opening.readingId == meter.lastReadingId
+        && opening.meterId == meterId
+        && opening.roomId == roomId
+        && opening.sequenceNumber == 1
+        && opening.kind == 'opening'
+        && opening.readingDate == meter.startedOn
+        && opening.readingDate == meter.lastReadingDate
+        && opening.readingWh == meter.lastReadingWh
+        && opening.previousReadingId == null
+        && opening.consumptionWh == 0;
+    }
+
+    function isAtomicReadingAppend(ownerId, meterId, readingId) {
+      let before = electricityMeterBefore(ownerId, meterId);
+      let after = electricityMeterAfter(ownerId, meterId);
+      let reading = meterReadingAfter(ownerId, readingId);
+      let state = roomMeterStateAfter(ownerId, before.roomId);
+      return before.status == 'active'
+        && after.status == 'active'
+        && state.currentMeterId == meterId
+        && reading.readingId == readingId
+        && reading.meterId == meterId
+        && reading.roomId == before.roomId
+        && reading.sequenceNumber == before.sequenceNumber
+        && reading.kind in ['regular', 'intermediate']
+        && reading.previousReadingId == before.lastReadingId
+        && reading.previousReadingDate == before.lastReadingDate
+        && reading.previousReadingWh == before.lastReadingWh
+        && reading.readingDate > before.lastReadingDate
+        && reading.readingWh >= before.lastReadingWh
+        && reading.consumptionWh
+          == reading.readingWh - before.lastReadingWh
+        && after.lastReadingId == readingId
+        && after.lastReadingDate == reading.readingDate
+        && after.lastReadingWh == reading.readingWh;
+    }
+
+    function isAtomicMeterTransition(ownerId, roomId, oldMeterId, newMeterId) {
+      let stateBefore = roomMeterStateBefore(ownerId, roomId);
+      let stateAfter = roomMeterStateAfter(ownerId, roomId);
+      let oldBefore = electricityMeterBefore(ownerId, oldMeterId);
+      let oldAfter = electricityMeterAfter(ownerId, oldMeterId);
+      let next = electricityMeterAfter(ownerId, newMeterId);
+      let closing = meterReadingAfter(ownerId, oldAfter.lastReadingId);
+      let opening = meterReadingAfter(ownerId, next.lastReadingId);
+      return stateBefore.currentMeterId == oldMeterId
+        && stateAfter.currentMeterId == newMeterId
+        && stateAfter.lastTransitionId == newMeterId
+        && oldBefore.roomId == roomId
+        && oldBefore.status == 'active'
+        && oldAfter.roomId == roomId
+        && oldAfter.status == 'retired'
+        && oldAfter.replacementMeterId == newMeterId
+        && oldAfter.endedOn == closing.readingDate
+        && closing.meterId == oldMeterId
+        && closing.roomId == roomId
+        && closing.sequenceNumber == oldBefore.sequenceNumber
+        && closing.kind == 'closing'
+        && closing.previousReadingId == oldBefore.lastReadingId
+        && closing.previousReadingDate == oldBefore.lastReadingDate
+        && closing.previousReadingWh == oldBefore.lastReadingWh
+        && closing.readingDate > oldBefore.lastReadingDate
+        && closing.readingWh >= oldBefore.lastReadingWh
+        && oldAfter.lastReadingId == closing.readingId
+        && oldAfter.lastReadingDate == closing.readingDate
+        && oldAfter.lastReadingWh == closing.readingWh
+        && next.meterId == newMeterId
+        && next.roomId == roomId
+        && next.sequenceNumber == oldBefore.sequenceNumber + 1
+        && next.status == 'active'
+        && next.startKind in ['reset', 'replacement', 'correction']
+        && isNonEmptyString(next.transitionReason, 500)
+        && next.previousMeterId == oldMeterId
+        && next.replacementMeterId == null
+        && next.startedOn == oldAfter.endedOn
+        && opening.readingId == next.lastReadingId
+        && opening.meterId == newMeterId
+        && opening.roomId == roomId
+        && opening.sequenceNumber == next.sequenceNumber
+        && opening.kind == 'opening'
+        && opening.readingDate == next.startedOn
+        && opening.readingDate == next.lastReadingDate
+        && opening.readingWh == next.lastReadingWh
+        && opening.previousReadingId == null
+        && opening.consumptionWh == 0;
+    }
+
+    function isMeterHeadOnlyUpdate(ownerId, meterId) {
+      return request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lastReadingId',
+          'lastReadingDate',
+          'lastReadingWh',
+          'updatedAt'
+        ])
+        && isAtomicReadingAppend(
+          ownerId,
+          meterId,
+          request.resource.data.lastReadingId
+        );
+    }
+
+    function isMeterRetirementUpdate(ownerId, meterId) {
+      return resource.data.status == 'active'
+        && request.resource.data.status == 'retired'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'endedOn',
+          'replacementMeterId',
+          'lastReadingId',
+          'lastReadingDate',
+          'lastReadingWh',
+          'updatedAt'
+        ])
+        && isAtomicMeterTransition(
+          ownerId,
+          resource.data.roomId,
+          meterId,
+          request.resource.data.replacementMeterId
+        );
+    }
+
+    function isValidElectricityReadingBatch(data, batchId, ownerId) {
+      return data.keys().hasAll([
+          'batchId',
+          'batchReference',
+          'status',
+          'effectiveDate',
+          'effectiveAt',
+          'rateMicropesosPerKwh',
+          'entries',
+          'roomCount',
+          'pendingCount',
+          'recordedCount',
+          'excludedCount',
+          'totalConsumptionWh',
+          'totalChargeCentavos',
+          'version',
+          'lastLinkId',
+          'createdBy',
+          'createdAt',
+          'updatedAt',
+          'finalizedAt',
+          'usedAt',
+          'voidReason',
+          'voidedAt'
+        ])
+        && data.keys().hasOnly([
+          'batchId',
+          'batchReference',
+          'status',
+          'effectiveDate',
+          'effectiveAt',
+          'rateMicropesosPerKwh',
+          'entries',
+          'roomCount',
+          'pendingCount',
+          'recordedCount',
+          'excludedCount',
+          'totalConsumptionWh',
+          'totalChargeCentavos',
+          'version',
+          'lastLinkId',
+          'createdBy',
+          'createdAt',
+          'updatedAt',
+          'finalizedAt',
+          'usedAt',
+          'voidReason',
+          'voidedAt',
+          'billingBatchId'
+        ])
+        && data.batchId == batchId
+        && isNonEmptyString(data.batchReference, 64)
+        && data.status in ['draft', 'finalized', 'usedInBilling', 'voided']
+        && isRecordedBusinessDate(data.effectiveDate)
+        && data.effectiveAt is timestamp
+        && data.rateMicropesosPerKwh is int
+        && data.rateMicropesosPerKwh >= 1
+        && data.rateMicropesosPerKwh <= 1000000000
+        && data.entries is list
+        && data.entries.size() >= 1
+        && data.entries.size() <= 100
+        && data.roomCount == data.entries.size()
+        && data.pendingCount is int
+        && data.pendingCount >= 0
+        && data.recordedCount is int
+        && data.recordedCount >= 0
+        && data.excludedCount is int
+        && data.excludedCount >= 0
+        && data.pendingCount + data.recordedCount + data.excludedCount
+          == data.roomCount
+        && data.totalConsumptionWh is int
+        && data.totalConsumptionWh >= 0
+        && data.totalConsumptionWh <= 100000000000000
+        && data.totalChargeCentavos is int
+        && data.totalChargeCentavos >= 0
+        && data.totalChargeCentavos <= 1000000000000000
+        && data.version is int
+        && data.version >= 1
+        && data.version <= 10000
+        && isOptionalString(data.lastLinkId, 128)
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (data.finalizedAt == null || data.finalizedAt is timestamp)
+        && (data.usedAt == null || data.usedAt is timestamp)
+        && isOptionalString(data.voidReason, 500)
+        && (data.voidedAt == null || data.voidedAt is timestamp)
+        && (
+          !data.keys().hasAny(['billingBatchId'])
+          || isNonEmptyString(data.billingBatchId, 128)
+        )
+        && (
+          (
+            data.status == 'draft'
+            && data.finalizedAt == null
+            && data.usedAt == null
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'finalized'
+            && data.pendingCount == 0
+            && data.finalizedAt is timestamp
+            && data.usedAt == null
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'usedInBilling'
+            && data.pendingCount == 0
+            && data.finalizedAt is timestamp
+            && data.usedAt is timestamp
+            && isNonEmptyString(data.billingBatchId, 128)
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'voided'
+            && data.pendingCount == 0
+            && data.finalizedAt is timestamp
+            && isNonEmptyString(data.voidReason, 500)
+            && data.voidReason.size() >= 3
+            && data.voidedAt is timestamp
+          )
+        );
+    }
+
+    function isValidElectricityBatchLink(data, linkId, ownerId) {
+      return data.keys().hasAll([
+          'linkId',
+          'batchId',
+          'batchReference',
+          'readingId',
+          'roomId',
+          'meterId',
+          'readingDate',
+          'readingWh',
+          'consumptionWh',
+          'chargeCentavos',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'linkId',
+          'batchId',
+          'batchReference',
+          'readingId',
+          'roomId',
+          'meterId',
+          'readingDate',
+          'readingWh',
+          'consumptionWh',
+          'chargeCentavos',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.linkId == linkId
+        && data.readingId == linkId
+        && isNonEmptyString(data.batchId, 128)
+        && isNonEmptyString(data.batchReference, 64)
+        && isNonEmptyString(data.roomId, 128)
+        && isNonEmptyString(data.meterId, 128)
+        && isRecordedBusinessDate(data.readingDate)
+        && data.readingWh is int
+        && data.readingWh >= 0
+        && data.readingWh <= 1000000000000
+        && data.consumptionWh is int
+        && data.consumptionWh >= 0
+        && data.chargeCentavos is int
+        && data.chargeCentavos >= 0
+        && data.createdBy == ownerId
+        && data.createdAt == request.time;
+    }
+
+    function isAtomicElectricityBatchLink(ownerId, linkId) {
+      let link = request.resource.data;
+      let batch = electricityReadingBatchAfter(ownerId, link.batchId);
+      let reading = meterReadingAfter(ownerId, link.readingId);
+      return batch.batchId == link.batchId
+        && batch.batchReference == link.batchReference
+        && batch.status == 'draft'
+        && batch.lastLinkId == linkId
+        && reading.readingId == link.readingId
+        && reading.roomId == link.roomId
+        && reading.meterId == link.meterId
+        && reading.readingDate == link.readingDate
+        && reading.readingWh == link.readingWh
+        && reading.consumptionWh == link.consumptionWh
+        && reading.note == 'Electricity batch ' + link.batchReference;
+    }
+
+    function isElectricityBatchDraftEdit() {
+      return resource.data.status == 'draft'
+        && request.resource.data.status == 'draft'
+        && request.resource.data.recordedCount == resource.data.recordedCount
+        && request.resource.data.lastLinkId == resource.data.lastLinkId
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'effectiveDate',
+          'effectiveAt',
+          'rateMicropesosPerKwh',
+          'entries',
+          'pendingCount',
+          'excludedCount',
+          'totalConsumptionWh',
+          'totalChargeCentavos',
+          'version',
+          'updatedAt'
+        ]);
+    }
+
+    function isElectricityBatchReadingAppend(ownerId) {
+      let link = electricityBatchReadingLinkAfter(
+        ownerId,
+        request.resource.data.lastLinkId
+      );
+      return resource.data.status == 'draft'
+        && request.resource.data.status == 'draft'
+        && request.resource.data.recordedCount == resource.data.recordedCount + 1
+        && request.resource.data.pendingCount == resource.data.pendingCount - 1
+        && request.resource.data.excludedCount == resource.data.excludedCount
+        && request.resource.data.version == resource.data.version + 1
+        && isNonEmptyString(request.resource.data.lastLinkId, 128)
+        && link.linkId == request.resource.data.lastLinkId
+        && link.batchId == request.resource.data.batchId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'entries',
+          'pendingCount',
+          'recordedCount',
+          'totalConsumptionWh',
+          'totalChargeCentavos',
+          'version',
+          'lastLinkId',
+          'updatedAt'
+        ]);
+    }
+
+    function isElectricityBatchFinalization() {
+      return resource.data.status == 'draft'
+        && resource.data.pendingCount == 0
+        && request.resource.data.status == 'finalized'
+        && request.resource.data.recordedCount + request.resource.data.excludedCount
+          == request.resource.data.roomCount
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.finalizedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'version',
+          'finalizedAt',
+          'updatedAt'
+        ]);
+    }
+
+    function isElectricityBatchUse(ownerId, batchId) {
+      let billing = utilityBillingBatchAfter(
+        ownerId,
+        request.resource.data.billingBatchId
+      );
+      return resource.data.status == 'finalized'
+        && request.resource.data.status == 'usedInBilling'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.usedAt == request.time
+        && isNonEmptyString(request.resource.data.billingBatchId, 128)
+        && billing.billingBatchId == request.resource.data.billingBatchId
+        && billing.electricityBatchId == batchId
+        && billing.electricityBatchReference
+          == request.resource.data.batchReference
+        && billing.createdAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'billingBatchId', 'version', 'usedAt', 'updatedAt'
+        ]);
+    }
+
+    function isElectricityBatchVoid(ownerId, batchId) {
+      let audit = electricityBatchVoidAfter(ownerId, batchId);
+      return resource.data.status == 'finalized'
+        && request.resource.data.status == 'voided'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.voidedAt == request.time
+        && isNonEmptyString(request.resource.data.voidReason, 500)
+        && request.resource.data.voidReason.size() >= 3
+        && audit.voidId == batchId
+        && audit.batchId == batchId
+        && audit.batchReference == request.resource.data.batchReference
+        && audit.reason == request.resource.data.voidReason
+        && audit.voidedBy == ownerId
+        && audit.createdAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'version',
+          'voidReason',
+          'voidedAt',
+          'updatedAt'
+        ]);
+    }
+
+    function isValidElectricityBatchVoid(data, voidId, ownerId) {
+      return data.keys().hasAll([
+          'voidId',
+          'batchId',
+          'batchReference',
+          'reason',
+          'voidedBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'voidId',
+          'batchId',
+          'batchReference',
+          'reason',
+          'voidedBy',
+          'createdAt'
+        ])
+        && data.voidId == voidId
+        && data.batchId == voidId
+        && isNonEmptyString(data.batchReference, 64)
+        && isNonEmptyString(data.reason, 500)
+        && data.reason.size() >= 3
+        && data.voidedBy == ownerId
+        && data.createdAt == request.time;
+    }
+
+    function isValidElectricityBillingRecord(data, recordId, ownerId) {
+      return data.keys().hasAll([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'rateMicropesosPerKwh',
+          'totalConsumptionWh',
+          'totalBaseChargeCentavos',
+          'totalAdjustmentCentavos',
+          'totalChargeCentavos',
+          'totalAllocatedCentavos',
+          'totalUnallocatedCentavos',
+          'roomCharges',
+          'sourceReadingIds',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'rateMicropesosPerKwh',
+          'totalConsumptionWh',
+          'totalBaseChargeCentavos',
+          'totalAdjustmentCentavos',
+          'totalChargeCentavos',
+          'totalAllocatedCentavos',
+          'totalUnallocatedCentavos',
+          'roomCharges',
+          'sourceReadingIds',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.recordId == recordId
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && data.rateMicropesosPerKwh is int
+        && data.rateMicropesosPerKwh >= 1
+        && data.rateMicropesosPerKwh <= 1000000000
+        && data.totalConsumptionWh is int
+        && data.totalConsumptionWh >= 0
+        && data.totalConsumptionWh <= 1000000000000
+        && data.totalBaseChargeCentavos is int
+        && data.totalBaseChargeCentavos >= 0
+        && data.totalBaseChargeCentavos <= 1000000000000000
+        && data.totalAdjustmentCentavos is int
+        && data.totalAdjustmentCentavos >= -1000000000000000
+        && data.totalAdjustmentCentavos <= 1000000000000000
+        && data.totalChargeCentavos is int
+        && data.totalChargeCentavos >= 0
+        && data.totalChargeCentavos <= 1000000000000000
+        && data.totalChargeCentavos
+          == data.totalBaseChargeCentavos + data.totalAdjustmentCentavos
+        && data.totalAllocatedCentavos is int
+        && data.totalAllocatedCentavos >= 0
+        && data.totalAllocatedCentavos <= 1000000000000000
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalUnallocatedCentavos <= 1000000000000000
+        && data.totalAllocatedCentavos + data.totalUnallocatedCentavos
+          == data.totalChargeCentavos
+        && data.roomCharges is list
+        && data.roomCharges.size() <= 500
+        && data.sourceReadingIds is list
+        && data.sourceReadingIds.size() >= 1
+        && data.sourceReadingIds.size() <= 2000
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    function isValidWaterSettings(data, settingsId) {
+      return settingsId == 'config'
+        && data.keys().hasAll([
+          'settingsId',
+          'defaultMethod',
+          'summerBasis',
+          'summerMonths',
+          'allowManualMethodOverride',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'settingsId',
+          'defaultMethod',
+          'summerBasis',
+          'summerMonths',
+          'allowManualMethodOverride',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.settingsId == settingsId
+        && data.defaultMethod in [
+          'personDays',
+          'roomDays',
+          'selectedBoarders',
+          'electricityPercentage'
+        ]
+        && data.summerBasis in [
+          'roomElectricityCharge',
+          'roomConsumption'
+        ]
+        && data.summerMonths is list
+        && data.summerMonths.size() >= 1
+        && data.summerMonths.size() <= 12
+        && data.summerMonths.hasOnly([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        && data.allowManualMethodOverride is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function linkedElectricityRecordMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBillingRecords/$(data.electricityRecordId)
+      ).data;
+      return isNonEmptyString(data.electricityRecordId, 128)
+        && exists(
+          /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBillingRecords/$(data.electricityRecordId)
+        )
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && (
+          (
+            data.summerBasis == 'roomElectricityCharge'
+            && source.totalBaseChargeCentavos > 0
+            && data.totalElectricityBasis
+              == source.totalBaseChargeCentavos
+          )
+          || (
+            data.summerBasis == 'roomConsumption'
+            && source.totalConsumptionWh > 0
+            && data.totalElectricityBasis == source.totalConsumptionWh
+          )
+        );
+    }
+
+    function isValidWaterBillingRecord(data, recordId, ownerId) {
+      return data.keys().hasAll([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'waterBillCentavos',
+          'method',
+          'summerBasis',
+          'electricityRecordId',
+          'totalPersonDays',
+          'totalElectricityBasis',
+          'totalAllocatedCentavos',
+          'totalUnallocatedCentavos',
+          'roomAllocations',
+          'boarderShares',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'waterBillCentavos',
+          'method',
+          'summerBasis',
+          'electricityRecordId',
+          'totalPersonDays',
+          'totalElectricityBasis',
+          'totalAllocatedCentavos',
+          'totalUnallocatedCentavos',
+          'roomAllocations',
+          'boarderShares',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.recordId == recordId
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && data.waterBillCentavos is int
+        && data.waterBillCentavos >= 0
+        && data.waterBillCentavos <= 1000000000000000
+        && data.method in [
+          'personDays',
+          'roomDays',
+          'electricityPercentage'
+        ]
+        && data.summerBasis in [
+          'roomElectricityCharge',
+          'roomConsumption'
+        ]
+        && isOptionalString(data.electricityRecordId, 128)
+        && data.totalPersonDays is int
+        && data.totalPersonDays >= 0
+        && data.totalPersonDays <= 10000000
+        && data.totalElectricityBasis is int
+        && data.totalElectricityBasis >= 0
+        && data.totalElectricityBasis <= 1000000000000000
+        && data.totalAllocatedCentavos is int
+        && data.totalAllocatedCentavos >= 0
+        && data.totalAllocatedCentavos <= 1000000000000000
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalUnallocatedCentavos <= 1000000000000000
+        && data.totalAllocatedCentavos + data.totalUnallocatedCentavos
+          == data.waterBillCentavos
+        && data.roomAllocations is list
+        && data.roomAllocations.size() <= 500
+        && data.boarderShares is list
+        && data.boarderShares.size() <= 2000
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && (
+          (
+            data.method == 'personDays'
+            && data.electricityRecordId == null
+            && data.totalElectricityBasis == 0
+          )
+          || (
+            data.method == 'roomDays'
+            && data.electricityRecordId == null
+            && data.totalElectricityBasis == 0
+            && data.boarderShares.size() == 0
+          )
+          || (
+            data.method == 'electricityPercentage'
+            && data.totalElectricityBasis > 0
+            && linkedElectricityRecordMatches(ownerId, data)
+          )
+        );
+    }
+
+    function linkedElectricityBatchMatchesWater(ownerId, data) {
+      let source = electricityReadingBatchAfter(ownerId, data.electricityBatchId);
+      return isNonEmptyString(data.electricityBatchId, 128)
+        && source.batchId == data.electricityBatchId
+        && source.batchReference == data.electricityBatchReference
+        && source.status in ['finalized', 'usedInBilling']
+        && source.effectiveDate == data.electricityMeasurementEnd
+        && isRecordedBusinessDate(data.electricityMeasurementStart)
+        && data.electricityMeasurementStart <= data.electricityMeasurementEnd
+        && (
+          (
+            data.summerBasis == 'roomElectricityCharge'
+            && source.totalChargeCentavos > 0
+            && data.totalElectricityBasis == source.totalChargeCentavos
+          )
+          || (
+            data.summerBasis == 'roomConsumption'
+            && source.totalConsumptionWh > 0
+            && data.totalElectricityBasis == source.totalConsumptionWh
+          )
+        );
+    }
+
+    function isValidWaterBillingBatch(data, batchId, ownerId) {
+      return data.keys().hasAll([
+          'batchId',
+          'batchReference',
+          'status',
+          'startDate',
+          'endDateExclusive',
+          'receiptDate',
+          'waterBillCentavos',
+          'method',
+          'summerBasis',
+          'electricityBatchId',
+          'electricityBatchReference',
+          'electricityMeasurementStart',
+          'electricityMeasurementEnd',
+          'referencePeriodMismatchConfirmed',
+          'referenceExplanation',
+          'notes',
+          'totalPersonDays',
+          'totalElectricityBasis',
+          'totalAllocatedCentavos',
+          'totalUnallocatedCentavos',
+          'roomAllocations',
+          'boarderShares',
+          'warnings',
+          'version',
+          'createdBy',
+          'createdAt',
+          'updatedAt',
+          'finalizedAt',
+          'usedAt',
+          'voidReason',
+          'voidedAt'
+        ])
+        && data.keys().hasOnly([
+          'batchId', 'batchReference', 'status', 'startDate',
+          'endDateExclusive', 'receiptDate', 'waterBillCentavos', 'method',
+          'summerBasis', 'electricityBatchId', 'electricityBatchReference',
+          'electricityMeasurementStart', 'electricityMeasurementEnd',
+          'referencePeriodMismatchConfirmed', 'referenceExplanation', 'notes',
+          'totalPersonDays', 'totalElectricityBasis', 'totalAllocatedCentavos',
+          'totalUnallocatedCentavos', 'roomAllocations', 'boarderShares',
+          'warnings', 'version', 'createdBy', 'createdAt', 'updatedAt',
+          'finalizedAt', 'usedAt', 'voidReason', 'voidedAt', 'billingBatchId',
+          'allocationSchemaVersion', 'roundingPolicy', 'includedBoarderCount', 'decisions'
+        ])
+        && data.batchId == batchId
+        && isNonEmptyString(data.batchReference, 64)
+        && data.status in ['draft', 'finalized', 'usedInBilling', 'voided']
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && isRecordedBusinessDate(data.receiptDate)
+        && data.waterBillCentavos is int
+        && data.waterBillCentavos >= 0
+        && data.waterBillCentavos <= 1000000000000000
+        && data.method in ['personDays', 'electricityPercentage', 'selectedBoarders']
+        && (data.method != 'selectedBoarders' || (
+          data.allocationSchemaVersion == 1
+          && data.roundingPolicy == 'boarderIdAscending'
+          && data.includedBoarderCount is int
+          && data.includedBoarderCount > 0
+          && data.includedBoarderCount <= 2000
+          && data.decisions is list
+          && data.decisions.size() >= data.includedBoarderCount
+          && data.decisions.size() <= 2000
+          && data.boarderShares.size() == data.includedBoarderCount
+          && data.totalUnallocatedCentavos == 0
+        ))
+        && data.summerBasis in ['roomElectricityCharge', 'roomConsumption']
+        && isOptionalString(data.electricityBatchId, 128)
+        && isOptionalString(data.electricityBatchReference, 64)
+        && (data.electricityMeasurementStart == null || isRecordedBusinessDate(data.electricityMeasurementStart))
+        && (data.electricityMeasurementEnd == null || isRecordedBusinessDate(data.electricityMeasurementEnd))
+        && data.referencePeriodMismatchConfirmed is bool
+        && isOptionalString(data.referenceExplanation, 500)
+        && isOptionalString(data.notes, 1000)
+        && data.totalPersonDays is int
+        && data.totalPersonDays >= 0
+        && data.totalPersonDays <= 10000000
+        && data.totalElectricityBasis is int
+        && data.totalElectricityBasis >= 0
+        && data.totalElectricityBasis <= 1000000000000000
+        && data.totalAllocatedCentavos is int
+        && data.totalAllocatedCentavos >= 0
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalAllocatedCentavos + data.totalUnallocatedCentavos == data.waterBillCentavos
+        && data.roomAllocations is list
+        && data.roomAllocations.size() <= 500
+        && data.boarderShares is list
+        && data.boarderShares.size() <= 2000
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.version is int
+        && data.version >= 1
+        && data.version <= 10000
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (data.finalizedAt == null || data.finalizedAt is timestamp)
+        && (data.usedAt == null || data.usedAt is timestamp)
+        && isOptionalString(data.voidReason, 500)
+        && (data.voidedAt == null || data.voidedAt is timestamp)
+        && (
+          !data.keys().hasAny(['billingBatchId'])
+          || isNonEmptyString(data.billingBatchId, 128)
+        )
+        && (
+          (
+            data.method in ['personDays', 'selectedBoarders']
+            && data.electricityBatchId == null
+            && data.electricityBatchReference == null
+            && data.electricityMeasurementStart == null
+            && data.electricityMeasurementEnd == null
+            && data.totalElectricityBasis == 0
+            && data.referencePeriodMismatchConfirmed == false
+          )
+          || (
+            data.method == 'electricityPercentage'
+            && data.totalElectricityBasis > 0
+            && linkedElectricityBatchMatchesWater(ownerId, data)
+            && (
+              (
+                data.startDate == data.electricityMeasurementStart
+                && data.endDateExclusive == data.electricityMeasurementEnd
+                && data.referencePeriodMismatchConfirmed == false
+              )
+              || (
+                (
+                  data.startDate != data.electricityMeasurementStart
+                  || data.endDateExclusive != data.electricityMeasurementEnd
+                )
+                && data.referencePeriodMismatchConfirmed == true
+              )
+            )
+          )
+        )
+        && (
+          (
+            data.status == 'draft'
+            && data.finalizedAt == null
+            && data.usedAt == null
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'finalized'
+            && data.finalizedAt is timestamp
+            && data.usedAt == null
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'usedInBilling'
+            && data.finalizedAt is timestamp
+            && data.usedAt is timestamp
+            && isNonEmptyString(data.billingBatchId, 128)
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.status == 'voided'
+            && data.finalizedAt is timestamp
+            && data.usedAt == null
+            && isNonEmptyString(data.voidReason, 500)
+            && data.voidReason.size() >= 3
+            && data.voidedAt is timestamp
+          )
+        );
+    }
+
+    function isWaterBatchDraftEdit() {
+      return resource.data.status == 'draft'
+        && request.resource.data.status == 'draft'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'startDate', 'endDateExclusive', 'receiptDate', 'waterBillCentavos',
+          'method', 'summerBasis', 'electricityBatchId',
+          'electricityBatchReference', 'electricityMeasurementStart',
+          'electricityMeasurementEnd', 'referencePeriodMismatchConfirmed',
+          'referenceExplanation', 'notes', 'totalPersonDays',
+          'totalElectricityBasis', 'totalAllocatedCentavos',
+          'totalUnallocatedCentavos', 'roomAllocations', 'boarderShares',
+          'warnings', 'version', 'updatedAt',
+          'allocationSchemaVersion', 'roundingPolicy', 'includedBoarderCount', 'decisions'
+        ]);
+    }
+
+    function isWaterBatchFinalization() {
+      return resource.data.status == 'draft'
+        && request.resource.data.status == 'finalized'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.finalizedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'version', 'finalizedAt', 'updatedAt'
+        ]);
+    }
+
+    function isWaterBatchUse(ownerId, batchId) {
+      let billing = utilityBillingBatchAfter(
+        ownerId,
+        request.resource.data.billingBatchId
+      );
+      return resource.data.status == 'finalized'
+        && request.resource.data.status == 'usedInBilling'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.usedAt == request.time
+        && isNonEmptyString(request.resource.data.billingBatchId, 128)
+        && billing.billingBatchId == request.resource.data.billingBatchId
+        && billing.waterBatchId == batchId
+        && billing.waterBatchReference == request.resource.data.batchReference
+        && billing.createdAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'billingBatchId', 'version', 'usedAt', 'updatedAt'
+        ]);
+    }
+
+    function isWaterBatchVoid(ownerId, batchId) {
+      let audit = waterBillingBatchVoidAfter(ownerId, batchId);
+      return resource.data.status == 'finalized'
+        && request.resource.data.status == 'voided'
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.voidedAt == request.time
+        && isNonEmptyString(request.resource.data.voidReason, 500)
+        && request.resource.data.voidReason.size() >= 3
+        && audit.voidId == batchId
+        && audit.batchId == batchId
+        && audit.batchReference == request.resource.data.batchReference
+        && audit.reason == request.resource.data.voidReason
+        && audit.voidedBy == ownerId
+        && audit.createdAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'version', 'voidReason', 'voidedAt', 'updatedAt'
+        ]);
+    }
+
+    function isValidWaterBatchVoid(data, voidId, ownerId) {
+      return data.keys().hasAll([
+          'voidId', 'batchId', 'batchReference', 'reason', 'voidedBy', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'voidId', 'batchId', 'batchReference', 'reason', 'voidedBy', 'createdAt'
+        ])
+        && data.voidId == voidId
+        && data.batchId == voidId
+        && isNonEmptyString(data.batchReference, 64)
+        && isNonEmptyString(data.reason, 500)
+        && data.reason.size() >= 3
+        && data.voidedBy == ownerId
+        && data.createdAt == request.time;
+    }
+
+    function utilityElectricitySourceMatches(ownerId, data) {
+      let source = electricityReadingBatchAfter(ownerId, data.electricityBatchId);
+      return source.batchId == data.electricityBatchId
+        && source.batchReference == data.electricityBatchReference
+        && source.status == 'usedInBilling'
+        && source.billingBatchId == data.billingBatchId
+        && source.effectiveDate == data.electricityMeasurementEnd
+        && source.rateMicropesosPerKwh
+          == data.electricityRateMicropesosPerKwh
+        && source.totalChargeCentavos == data.electricityTotalCentavos
+        && source.usedAt == request.time;
+    }
+
+    function utilityWaterSourceMatches(ownerId, data) {
+      let source = waterBillingBatchAfter(ownerId, data.waterBatchId);
+      return source.batchId == data.waterBatchId
+        && source.batchReference == data.waterBatchReference
+        && source.status == 'usedInBilling'
+        && source.billingBatchId == data.billingBatchId
+        && source.startDate == data.waterPeriodStart
+        && source.endDateExclusive == data.waterPeriodEndExclusive
+        && source.receiptDate == data.waterReceiptDate
+        && source.method == data.waterMethod
+        && source.summerBasis == data.waterSummerBasis
+        && source.electricityBatchId
+          == data.waterReferenceElectricityBatchId
+        && source.electricityBatchReference
+          == data.waterReferenceElectricityBatchReference
+        && source.totalAllocatedCentavos == data.waterTotalCentavos
+        && source.totalUnallocatedCentavos == data.totalUnallocatedCentavos
+        && source.usedAt == request.time;
+    }
+
+    function isValidUtilityBillingBatch(data, billingBatchId, ownerId) {
+      return data.keys().hasAll([
+          'billingBatchId', 'billingBatchReference', 'status', 'issuedOn',
+          'electricityBatchId', 'electricityBatchReference',
+          'electricityMeasurementStart', 'electricityMeasurementEnd',
+          'electricityRateMicropesosPerKwh', 'sourceReadingIds',
+          'waterBatchId', 'waterBatchReference', 'waterPeriodStart',
+          'waterPeriodEndExclusive', 'waterReceiptDate', 'waterMethod',
+          'waterSummerBasis', 'waterReferenceElectricityBatchId',
+          'waterReferenceElectricityBatchReference',
+          'associationMismatchConfirmed', 'electricityTotalCentavos',
+          'waterTotalCentavos', 'adjustmentTotalCentavos',
+          'totalBilledCentavos', 'totalUnallocatedCentavos', 'statements',
+          'warnings', 'createdBy', 'createdAt', 'voidReason', 'voidedAt'
+        ])
+        && data.keys().hasOnly([
+          'billingBatchId', 'billingBatchReference', 'status', 'issuedOn',
+          'electricityBatchId', 'electricityBatchReference',
+          'electricityMeasurementStart', 'electricityMeasurementEnd',
+          'electricityRateMicropesosPerKwh', 'sourceReadingIds',
+          'waterBatchId', 'waterBatchReference', 'waterPeriodStart',
+          'waterPeriodEndExclusive', 'waterReceiptDate', 'waterMethod',
+          'waterSummerBasis', 'waterReferenceElectricityBatchId',
+          'waterReferenceElectricityBatchReference',
+          'associationMismatchConfirmed', 'electricityTotalCentavos',
+          'waterTotalCentavos', 'adjustmentTotalCentavos',
+          'totalBilledCentavos', 'totalUnallocatedCentavos', 'statements',
+          'warnings', 'createdBy', 'createdAt', 'voidReason', 'voidedAt'
+        ])
+        && data.billingBatchId == billingBatchId
+        && isNonEmptyString(data.billingBatchReference, 64)
+        && data.status == 'finalized'
+        && isRecordedBusinessDate(data.issuedOn)
+        && isNonEmptyString(data.electricityBatchId, 128)
+        && isNonEmptyString(data.electricityBatchReference, 64)
+        && isRecordedBusinessDate(data.electricityMeasurementStart)
+        && isRecordedBusinessDate(data.electricityMeasurementEnd)
+        && data.electricityMeasurementStart < data.electricityMeasurementEnd
+        && data.electricityRateMicropesosPerKwh is int
+        && data.electricityRateMicropesosPerKwh >= 1
+        && data.electricityRateMicropesosPerKwh <= 1000000000
+        && data.sourceReadingIds is list
+        && data.sourceReadingIds.size() <= 2000
+        && isNonEmptyString(data.waterBatchId, 128)
+        && isNonEmptyString(data.waterBatchReference, 64)
+        && isRecordedBusinessDate(data.waterPeriodStart)
+        && isRecordedBusinessDate(data.waterPeriodEndExclusive)
+        && data.waterPeriodStart < data.waterPeriodEndExclusive
+        && isRecordedBusinessDate(data.waterReceiptDate)
+        && data.waterMethod in ['personDays', 'electricityPercentage', 'selectedBoarders']
+        && data.waterSummerBasis in [
+          'roomElectricityCharge', 'roomConsumption'
+        ]
+        && isOptionalString(data.waterReferenceElectricityBatchId, 128)
+        && isOptionalString(data.waterReferenceElectricityBatchReference, 64)
+        && data.associationMismatchConfirmed is bool
+        && data.electricityTotalCentavos is int
+        && data.electricityTotalCentavos >= 0
+        && data.electricityTotalCentavos <= 1000000000000000
+        && data.waterTotalCentavos is int
+        && data.waterTotalCentavos >= 0
+        && data.waterTotalCentavos <= 1000000000000000
+        && data.adjustmentTotalCentavos == 0
+        && data.totalBilledCentavos
+          == data.electricityTotalCentavos + data.waterTotalCentavos
+        && data.totalBilledCentavos >= 0
+        && data.totalBilledCentavos <= 1000000000000000
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalUnallocatedCentavos <= 1000000000000000
+        && data.statements is list
+        && data.statements.size() >= 1
+        && data.statements.size() <= 500
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt == request.time
+        && data.voidReason == null
+        && data.voidedAt == null
+        && (
+          (
+            data.waterReferenceElectricityBatchId == null
+            && data.waterReferenceElectricityBatchReference == null
+            && data.associationMismatchConfirmed == false
+          )
+          || (
+            isNonEmptyString(data.waterReferenceElectricityBatchId, 128)
+            && isNonEmptyString(
+              data.waterReferenceElectricityBatchReference,
+              64
+            )
+            && (
+              (
+                data.waterReferenceElectricityBatchId
+                  == data.electricityBatchId
+                && data.associationMismatchConfirmed == false
+              )
+              || (
+                data.waterReferenceElectricityBatchId
+                  != data.electricityBatchId
+                && data.associationMismatchConfirmed == true
+              )
+            )
+          )
+        )
+        && utilityElectricitySourceMatches(ownerId, data)
+        && utilityWaterSourceMatches(ownerId, data);
+    }
+
+    function isValidUtilityRoomBillAccount(data, accountId, ownerId) {
+      let billing = utilityBillingBatchAfter(
+        ownerId,
+        data.billingBatchId
+      );
+      return data.keys().hasAll([
+          'accountId', 'billingBatchId', 'roomId', 'roomName',
+          'totalChargesCentavos', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountId', 'billingBatchId', 'roomId', 'roomName',
+          'totalChargesCentavos', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.accountId == accountId
+        && isNonEmptyString(data.billingBatchId, 128)
+        && isNonEmptyString(data.roomId, 128)
+        && isNonEmptyString(data.roomName, 120)
+        && data.totalChargesCentavos is int
+        && data.totalChargesCentavos > 0
+        && data.totalChargesCentavos <= billing.totalBilledCentavos
+        && data.totalPaidCentavos == 0
+        && data.lastPaymentId == null
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && billing.status == 'finalized'
+        && billing.createdAt == request.time;
+    }
+
+    function isValidUtilityRoomBillAccountUpdate(data, accountId, ownerId) {
+      let billing = utilityBillingBatchAfter(ownerId, data.billingBatchId);
+      return data.keys().hasAll([
+          'accountId', 'billingBatchId', 'roomId', 'roomName',
+          'totalChargesCentavos', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountId', 'billingBatchId', 'roomId', 'roomName',
+          'totalChargesCentavos', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.accountId == accountId
+        && isNonEmptyString(data.billingBatchId, 128)
+        && isNonEmptyString(data.roomId, 128)
+        && isNonEmptyString(data.roomName, 120)
+        && data.totalChargesCentavos is int
+        && data.totalChargesCentavos > 0
+        && data.totalChargesCentavos <= billing.totalBilledCentavos
+        && data.totalPaidCentavos is int
+        && data.totalPaidCentavos >= 0
+        && data.totalPaidCentavos <= data.totalChargesCentavos
+        && isNonEmptyString(data.lastPaymentId, 300)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && billing.status == 'finalized';
+    }
+
+    function isValidUtilityRoomPayment(data, paymentId, ownerId) {
+      return data.keys().hasAll([
+          'paymentId', 'billingBatchId', 'accountId', 'roomId', 'roomName',
+          'amountCentavos', 'paymentDate', 'method', 'notes', 'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId', 'billingBatchId', 'accountId', 'roomId', 'roomName',
+          'amountCentavos', 'paymentDate', 'method', 'notes', 'createdBy',
+          'createdAt'
+        ])
+        && data.paymentId == paymentId
+        && isNonEmptyString(data.billingBatchId, 128)
+        && isNonEmptyString(data.roomId, 128)
+        && data.accountId == data.billingBatchId + '_' + data.roomId
+        && isNonEmptyString(data.roomName, 120)
+        && data.amountCentavos is int
+        && data.amountCentavos > 0
+        && data.amountCentavos <= 1000000000000000
+        && isRecordedBusinessDate(data.paymentDate)
+        && data.method in ['cash', 'gcash', 'bankTransfer', 'other']
+        && isOptionalString(data.notes, 500)
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRentSettings(data, settingsId) {
+      return settingsId == 'config'
+        && data.keys().hasAll([
+          'settingsId',
+          'mode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'settingsId',
+          'mode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.settingsId == settingsId
+        && data.mode in ['disabled', 'perBoarder', 'perRoom']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRentBillingRecord(data, recordId, ownerId) {
+      return data.keys().hasAll([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'mode',
+          'periodDays',
+          'totalRentCentavos',
+          'totalAdjustmentCentavos',
+          'grandTotalCentavos',
+          'roomAllocations',
+          'boarderCharges',
+          'adjustments',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'recordId',
+          'startDate',
+          'endDateExclusive',
+          'mode',
+          'periodDays',
+          'totalRentCentavos',
+          'totalAdjustmentCentavos',
+          'grandTotalCentavos',
+          'roomAllocations',
+          'boarderCharges',
+          'adjustments',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.recordId == recordId
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && data.mode in ['disabled', 'perBoarder', 'perRoom']
+        && data.periodDays is int
+        && data.periodDays >= 1
+        && data.periodDays <= 366
+        && data.totalRentCentavos is int
+        && data.totalRentCentavos >= 0
+        && data.totalRentCentavos <= 1000000000000000
+        && data.totalAdjustmentCentavos is int
+        && data.totalAdjustmentCentavos >= -1000000000000000
+        && data.totalAdjustmentCentavos <= 1000000000000000
+        && data.grandTotalCentavos is int
+        && data.grandTotalCentavos >= 0
+        && data.grandTotalCentavos <= 1000000000000000
+        && data.totalRentCentavos + data.totalAdjustmentCentavos
+          == data.grandTotalCentavos
+        && data.roomAllocations is list
+        && data.roomAllocations.size() <= 500
+        && data.boarderCharges is list
+        && data.boarderCharges.size() <= 2000
+        && data.adjustments is list
+        && data.adjustments.size() <= 500
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && (
+          data.mode != 'disabled'
+          || (
+            data.totalRentCentavos == 0
+            && data.roomAllocations.size() == 0
+          )
+        );
+    }
+
+    function rentAgreementBefore(ownerId, agreementId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentAgreements/$(agreementId)
+      ).data;
+    }
+
+    function rentCycleBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentCycles/$(cycleId)
+      ).data;
+    }
+
+    function rentCycleAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentCycles/$(cycleId)
+      ).data;
+    }
+
+    function rentCycleControlBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentCycleControls/$(cycleId)
+      ).data;
+    }
+
+    function rentCycleControlAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentCycleControls/$(cycleId)
+      ).data;
+    }
+
+    function rentPaymentAfter(ownerId, paymentId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentPayments/$(paymentId)
+      ).data;
+    }
+
+    function isValidRentAgreement(data, agreementId, ownerId) {
+      let occupancy = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/occupancies/$(data.occupancyId)
+      ).data;
+      let boarder = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarders/$(data.boarderId)
+      ).data;
+      let room = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rooms/$(data.roomId)
+      ).data;
+      return data.keys().hasAll([
+          'agreementId', 'occupancyId', 'boarderId', 'boarderName',
+          'roomId', 'roomName', 'startDate', 'anchorDay',
+          'monthlyRentCentavos', 'createdBy', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'agreementId', 'occupancyId', 'boarderId', 'boarderName',
+          'roomId', 'roomName', 'startDate', 'anchorDay',
+          'monthlyRentCentavos', 'createdBy', 'createdAt'
+        ])
+        && data.agreementId == agreementId
+        && data.occupancyId == agreementId
+        && occupancy.occupancyId == data.occupancyId
+        && occupancy.boarderId == data.boarderId
+        && occupancy.roomId == data.roomId
+        && occupancy.moveInDate == data.startDate
+        && boarder.boarderId == data.boarderId
+        && boarder.fullName == data.boarderName
+        && room.roomId == data.roomId
+        && room.roomName == data.roomName
+        && isRecordedBusinessDate(data.startDate)
+        && data.anchorDay is int
+        && data.anchorDay >= 1
+        && data.anchorDay <= 31
+        && data.anchorDay == data.startDate.day()
+        && data.monthlyRentCentavos is int
+        && data.monthlyRentCentavos > 0
+        && data.monthlyRentCentavos <= 1000000000000000
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRentCycle(data, cycleId, ownerId) {
+      let agreement = rentAgreementBefore(ownerId, data.agreementId);
+      return data.keys().hasAll([
+          'cycleId', 'agreementId', 'occupancyId', 'boarderId',
+          'boarderName', 'roomId', 'roomName', 'kind', 'cycleNumber',
+          'coverageStart', 'coverageEndExclusive', 'dueDate',
+          'amountCentavos', 'createdBy', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'cycleId', 'agreementId', 'occupancyId', 'boarderId',
+          'boarderName', 'roomId', 'roomName', 'kind', 'cycleNumber',
+          'coverageStart', 'coverageEndExclusive', 'dueDate',
+          'amountCentavos', 'createdBy', 'createdAt'
+        ])
+        && data.cycleId == cycleId
+        && agreement.agreementId == data.agreementId
+        && agreement.occupancyId == data.occupancyId
+        && agreement.boarderId == data.boarderId
+        && agreement.boarderName == data.boarderName
+        && agreement.roomId == data.roomId
+        && agreement.roomName == data.roomName
+        && data.kind in ['monthly', 'extraStay']
+        && data.cycleNumber is int
+        && data.cycleNumber >= 1
+        && data.cycleNumber <= 1200
+        && isRecordedBusinessDate(data.coverageStart)
+        && isDateOnly(data.coverageEndExclusive)
+        && isDateOnly(data.dueDate)
+        && data.coverageStart >= agreement.startDate
+        && data.coverageStart < data.coverageEndExclusive
+        && data.dueDate == data.coverageEndExclusive
+        && data.amountCentavos is int
+        && data.amountCentavos > 0
+        && data.amountCentavos <= 1000000000000000
+        && (
+          data.kind == 'extraStay'
+          || data.amountCentavos == agreement.monthlyRentCentavos
+        )
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRentCycleControl(data, cycleId) {
+      return data.keys().hasAll([
+          'cycleId', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'cycleId', 'totalPaidCentavos', 'lastPaymentId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.cycleId == cycleId
+        && data.totalPaidCentavos is int
+        && data.totalPaidCentavos >= 0
+        && data.totalPaidCentavos <= 1000000000000000
+        && (
+          data.lastPaymentId == null
+          || isNonEmptyString(data.lastPaymentId, 300)
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRentPayment(data, paymentId, ownerId) {
+      let cycle = rentCycleBefore(ownerId, data.cycleId);
+      let before = rentCycleControlBefore(ownerId, data.cycleId);
+      let after = rentCycleControlAfter(ownerId, data.cycleId);
+      return data.keys().hasAll([
+          'paymentId', 'cycleId', 'agreementId', 'amountCentavos',
+          'note', 'receivedOn', 'createdBy', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId', 'cycleId', 'agreementId', 'amountCentavos',
+          'note', 'receivedOn', 'createdBy', 'createdAt'
+        ])
+        && data.paymentId == paymentId
+        && cycle.cycleId == data.cycleId
+        && cycle.agreementId == data.agreementId
+        && data.amountCentavos is int
+        && data.amountCentavos > 0
+        && data.amountCentavos <= cycle.amountCentavos - before.totalPaidCentavos
+        && (
+          data.note == null
+          || (data.note is string && data.note.size() <= 500)
+        )
+        && isRecordedBusinessDate(data.receivedOn)
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && after.totalPaidCentavos
+          == before.totalPaidCentavos + data.amountCentavos
+        && after.lastPaymentId == paymentId;
+    }
+
+    function isValidExtraStayResolution(data, resolutionId, ownerId) {
+      let agreement = rentAgreementBefore(ownerId, data.agreementId);
+      let occupancy = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/occupancies/$(data.occupancyId)
+      ).data;
+      return data.keys().hasAll([
+          'resolutionId', 'agreementId', 'occupancyId', 'boarderId',
+          'roomId', 'extraStayStart', 'moveOutDate', 'decision',
+          'amountCentavos', 'note', 'chargeCycleId', 'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'resolutionId', 'agreementId', 'occupancyId', 'boarderId',
+          'roomId', 'extraStayStart', 'moveOutDate', 'decision',
+          'amountCentavos', 'note', 'chargeCycleId', 'createdBy',
+          'createdAt'
+        ])
+        && data.resolutionId == resolutionId
+        && data.occupancyId == resolutionId
+        && agreement.agreementId == data.agreementId
+        && agreement.occupancyId == data.occupancyId
+        && agreement.boarderId == data.boarderId
+        && agreement.roomId == data.roomId
+        && occupancy.occupancyId == data.occupancyId
+        && occupancy.moveOutDate == data.moveOutDate
+        && isRecordedBusinessDate(data.extraStayStart)
+        && isRecordedBusinessDate(data.moveOutDate)
+        && data.extraStayStart >= agreement.startDate
+        && data.extraStayStart < data.moveOutDate
+        && data.decision in ['waived', 'manualCharge', 'fullCycle']
+        && data.amountCentavos is int
+        && data.amountCentavos >= 0
+        && data.amountCentavos <= 1000000000000000
+        && isNonEmptyString(data.note, 500)
+        && data.note.size() >= 3
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && (
+          (
+            data.decision == 'waived'
+            && data.amountCentavos == 0
+            && data.chargeCycleId == null
+          )
+          || (
+            data.decision == 'manualCharge'
+            && data.amountCentavos > 0
+            && isNonEmptyString(data.chargeCycleId, 300)
+            && rentCycleAfter(ownerId, data.chargeCycleId).kind == 'extraStay'
+            && rentCycleAfter(ownerId, data.chargeCycleId).amountCentavos
+              == data.amountCentavos
+          )
+          || (
+            data.decision == 'fullCycle'
+            && data.amountCentavos == agreement.monthlyRentCentavos
+            && isNonEmptyString(data.chargeCycleId, 300)
+            && rentCycleAfter(ownerId, data.chargeCycleId).kind == 'monthly'
+            && rentCycleAfter(ownerId, data.chargeCycleId).amountCentavos
+              == data.amountCentavos
+          )
+        );
+    }
+
+    function billingPeriodAfter(ownerId, periodId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/billingPeriods/$(periodId)
+      ).data;
+    }
+
+    function billingCycleBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/monthlyBillingCycles/$(cycleId)
+      ).data;
+    }
+
+    function billingCycleAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/monthlyBillingCycles/$(cycleId)
+      ).data;
+    }
+
+    function billingControlBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/billingCycleControls/$(cycleId)
+      ).data;
+    }
+
+    function billingControlAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/billingCycleControls/$(cycleId)
+      ).data;
+    }
+
+    function billAccountBefore(ownerId, accountId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarderBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function billAccountAfter(ownerId, accountId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/boarderBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function paymentAfter(ownerId, paymentId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/payments/$(paymentId)
+      ).data;
+    }
+
+    function isValidBillingPeriod(data, periodId) {
+      return data.keys().hasAll([
+          'periodId',
+          'startDate',
+          'endDateExclusive',
+          'activeCycleId',
+          'latestCycleId',
+          'latestVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'periodId',
+          'startDate',
+          'endDateExclusive',
+          'activeCycleId',
+          'latestCycleId',
+          'latestVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.periodId == periodId
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && isNonEmptyString(data.latestCycleId, 300)
+        && (
+          data.activeCycleId == null
+          || isNonEmptyString(data.activeCycleId, 300)
+        )
+        && data.latestVersion is int
+        && data.latestVersion >= 1
+        && data.latestVersion <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function electricitySourceMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBillingRecords/$(data.electricityRecordId)
+      ).data;
+      return source.recordId == data.electricityRecordId
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && source.totalAllocatedCentavos == data.electricityTotalCentavos;
+    }
+
+    function waterSourceMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/waterBillingRecords/$(data.waterRecordId)
+      ).data;
+      return source.recordId == data.waterRecordId
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && source.totalAllocatedCentavos == data.waterTotalCentavos;
+    }
+
+    function rentSourceMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/rentBillingRecords/$(data.rentRecordId)
+      ).data;
+      return source.recordId == data.rentRecordId
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && source.totalRentCentavos == data.rentTotalCentavos
+        && source.totalAdjustmentCentavos == data.rentAdjustmentCentavos;
+    }
+
+    function isValidMonthlyBillingCycle(data, cycleId, ownerId) {
+      return data.keys().hasAll([
+          'billingCycleId',
+          'periodId',
+          'version',
+          'replacesCycleId',
+          'startDate',
+          'endDateExclusive',
+          'electricityRecordId',
+          'waterRecordId',
+          'rentRecordId',
+          'electricityTotalCentavos',
+          'waterTotalCentavos',
+          'rentTotalCentavos',
+          'rentAdjustmentCentavos',
+          'totalBilledCentavos',
+          'totalUnallocatedCentavos',
+          'statements',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'billingCycleId',
+          'periodId',
+          'version',
+          'replacesCycleId',
+          'startDate',
+          'endDateExclusive',
+          'electricityRecordId',
+          'waterRecordId',
+          'rentRecordId',
+          'electricityTotalCentavos',
+          'waterTotalCentavos',
+          'rentTotalCentavos',
+          'rentAdjustmentCentavos',
+          'totalBilledCentavos',
+          'totalUnallocatedCentavos',
+          'statements',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.billingCycleId == cycleId
+        && isNonEmptyString(data.periodId, 300)
+        && data.version is int
+        && data.version >= 1
+        && data.version <= 100
+        && (
+          data.replacesCycleId == null
+          || isNonEmptyString(data.replacesCycleId, 300)
+        )
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && isNonEmptyString(data.electricityRecordId, 300)
+        && isNonEmptyString(data.waterRecordId, 300)
+        && isNonEmptyString(data.rentRecordId, 300)
+        && data.electricityTotalCentavos is int
+        && data.electricityTotalCentavos >= 0
+        && data.electricityTotalCentavos <= 1000000000000000
+        && data.waterTotalCentavos is int
+        && data.waterTotalCentavos >= 0
+        && data.waterTotalCentavos <= 1000000000000000
+        && data.rentTotalCentavos is int
+        && data.rentTotalCentavos >= 0
+        && data.rentTotalCentavos <= 1000000000000000
+        && data.rentAdjustmentCentavos is int
+        && data.rentAdjustmentCentavos >= -1000000000000000
+        && data.rentAdjustmentCentavos <= 1000000000000000
+        && data.totalBilledCentavos is int
+        && data.totalBilledCentavos >= 0
+        && data.totalBilledCentavos <= 1000000000000000
+        && data.totalBilledCentavos
+          == data.electricityTotalCentavos
+            + data.waterTotalCentavos
+            + data.rentTotalCentavos
+            + data.rentAdjustmentCentavos
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalUnallocatedCentavos <= 1000000000000000
+        && data.statements is list
+        && data.statements.size() <= 400
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && electricitySourceMatches(ownerId, data)
+        && waterSourceMatches(ownerId, data)
+        && rentSourceMatches(ownerId, data);
+    }
+
+    function isValidBillingCycleControl(data, cycleId) {
+      return data.keys().hasAll([
+          'billingCycleId',
+          'state',
+          'totalBilledCentavos',
+          'totalPaidCentavos',
+          'outstandingCentavos',
+          'voidReason',
+          'voidedAt',
+          'reissuedAsCycleId',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'billingCycleId',
+          'state',
+          'totalBilledCentavos',
+          'totalPaidCentavos',
+          'outstandingCentavos',
+          'voidReason',
+          'voidedAt',
+          'reissuedAsCycleId',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.billingCycleId == cycleId
+        && data.state in ['active', 'voided']
+        && data.totalBilledCentavos is int
+        && data.totalBilledCentavos >= 0
+        && data.totalBilledCentavos <= 1000000000000000
+        && data.totalPaidCentavos is int
+        && data.totalPaidCentavos >= 0
+        && data.totalPaidCentavos <= data.totalBilledCentavos
+        && data.outstandingCentavos
+          == data.totalBilledCentavos - data.totalPaidCentavos
+        && (
+          data.voidReason == null
+          || isNonEmptyString(data.voidReason, 500)
+        )
+        && (data.voidedAt == null || data.voidedAt is timestamp)
+        && (
+          data.reissuedAsCycleId == null
+          || isNonEmptyString(data.reissuedAsCycleId, 300)
+        )
+        && (
+          data.lastPaymentId == null
+          || isNonEmptyString(data.lastPaymentId, 300)
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          (
+            data.state == 'active'
+            && data.voidReason == null
+            && data.voidedAt == null
+          )
+          || (
+            data.state == 'voided'
+            && isNonEmptyString(data.voidReason, 500)
+            && data.voidedAt is timestamp
+            && data.totalPaidCentavos == 0
+          )
+        );
+    }
+
+    function isValidBoarderBillAccount(data, accountId) {
+      return data.keys().hasAll([
+          'accountId',
+          'billingCycleId',
+          'boarderId',
+          'boarderName',
+          'totalChargesCentavos',
+          'previousBalanceCentavos',
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountId',
+          'billingCycleId',
+          'boarderId',
+          'boarderName',
+          'totalChargesCentavos',
+          'previousBalanceCentavos',
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.accountId == accountId
+        && isNonEmptyString(data.billingCycleId, 300)
+        && isNonEmptyString(data.boarderId, 300)
+        && accountId == data.billingCycleId + '_' + data.boarderId
+        && isNonEmptyString(data.boarderName, 120)
+        && data.totalChargesCentavos is int
+        && data.totalChargesCentavos >= 0
+        && data.totalChargesCentavos <= 1000000000000000
+        && data.previousBalanceCentavos is int
+        && data.previousBalanceCentavos >= 0
+        && data.previousBalanceCentavos <= 1000000000000000
+        && data.totalPaidCentavos is int
+        && data.totalPaidCentavos >= 0
+        && data.totalPaidCentavos <= data.totalChargesCentavos
+        && (
+          data.lastPaymentId == null
+          || isNonEmptyString(data.lastPaymentId, 300)
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data, paymentId, ownerId) {
+      return data.keys().hasAll([
+          'paymentId',
+          'billingCycleId',
+          'accountId',
+          'boarderId',
+          'boarderName',
+          'amountCentavos',
+          'paymentDate',
+          'method',
+          'notes',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId',
+          'billingCycleId',
+          'accountId',
+          'boarderId',
+          'boarderName',
+          'amountCentavos',
+          'paymentDate',
+          'method',
+          'notes',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.paymentId == paymentId
+        && isNonEmptyString(data.billingCycleId, 300)
+        && isNonEmptyString(data.boarderId, 300)
+        && data.accountId == data.billingCycleId + '_' + data.boarderId
+        && isNonEmptyString(data.boarderName, 120)
+        && data.amountCentavos is int
+        && data.amountCentavos > 0
+        && data.amountCentavos <= 1000000000000000
+        && isRecordedBusinessDate(data.paymentDate)
+        && data.method in ['cash', 'gcash', 'bankTransfer', 'other']
+        && isOptionalString(data.notes, 500)
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    function roomBillingPeriodAfter(ownerId, periodId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillingPeriods/$(periodId)
+      ).data;
+    }
+
+    function roomBillingCycleBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillingCycles/$(cycleId)
+      ).data;
+    }
+
+    function roomBillingCycleAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillingCycles/$(cycleId)
+      ).data;
+    }
+
+    function roomBillingControlBefore(ownerId, cycleId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillingControls/$(cycleId)
+      ).data;
+    }
+
+    function roomBillingControlAfter(ownerId, cycleId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillingControls/$(cycleId)
+      ).data;
+    }
+
+    function roomBillAccountBefore(ownerId, accountId) {
+      return get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function roomBillAccountAfter(ownerId, accountId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomBillAccounts/$(accountId)
+      ).data;
+    }
+
+    function roomPaymentAfter(ownerId, paymentId) {
+      return getAfter(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/roomPayments/$(paymentId)
+      ).data;
+    }
+
+    function roomElectricitySourceMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/electricityBillingRecords/$(data.electricityRecordId)
+      ).data;
+      return source.recordId == data.electricityRecordId
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && source.totalAllocatedCentavos == data.electricityTotalCentavos;
+    }
+
+    function roomWaterSourceMatches(ownerId, data) {
+      let source = get(
+        /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/primary/waterBillingRecords/$(data.waterRecordId)
+      ).data;
+      return source.recordId == data.waterRecordId
+        && source.startDate == data.startDate
+        && source.endDateExclusive == data.endDateExclusive
+        && source.method == 'roomDays'
+        && source.boarderShares.size() == 0
+        && source.totalAllocatedCentavos == data.waterTotalCentavos;
+    }
+
+    function roomBillingExcludesRent(data) {
+      return data.rentRecordId == 'not-applicable'
+        && data.rentTotalCentavos == 0
+        && data.adjustmentTotalCentavos == 0;
+    }
+
+    function isValidRoomBillingCycle(data, cycleId, ownerId) {
+      return data.keys().hasAll([
+          'billingCycleId',
+          'periodId',
+          'billingModel',
+          'version',
+          'replacesCycleId',
+          'startDate',
+          'endDateExclusive',
+          'electricityRecordId',
+          'waterRecordId',
+          'rentRecordId',
+          'electricityTotalCentavos',
+          'waterTotalCentavos',
+          'rentTotalCentavos',
+          'adjustmentTotalCentavos',
+          'totalBilledCentavos',
+          'totalUnallocatedCentavos',
+          'statements',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'billingCycleId',
+          'periodId',
+          'billingModel',
+          'version',
+          'replacesCycleId',
+          'startDate',
+          'endDateExclusive',
+          'electricityRecordId',
+          'waterRecordId',
+          'rentRecordId',
+          'electricityTotalCentavos',
+          'waterTotalCentavos',
+          'rentTotalCentavos',
+          'adjustmentTotalCentavos',
+          'totalBilledCentavos',
+          'totalUnallocatedCentavos',
+          'statements',
+          'warnings',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.billingCycleId == cycleId
+        && data.billingModel == 'roomV2'
+        && isNonEmptyString(data.periodId, 300)
+        && data.version is int
+        && data.version >= 1
+        && data.version <= 100
+        && (
+          data.replacesCycleId == null
+          || isNonEmptyString(data.replacesCycleId, 300)
+        )
+        && isRecordedBusinessDate(data.startDate)
+        && isRecordedBusinessDate(data.endDateExclusive)
+        && data.startDate < data.endDateExclusive
+        && isNonEmptyString(data.electricityRecordId, 300)
+        && isNonEmptyString(data.waterRecordId, 300)
+        && isNonEmptyString(data.rentRecordId, 300)
+        && data.electricityTotalCentavos is int
+        && data.electricityTotalCentavos >= 0
+        && data.electricityTotalCentavos <= 1000000000000000
+        && data.waterTotalCentavos is int
+        && data.waterTotalCentavos >= 0
+        && data.waterTotalCentavos <= 1000000000000000
+        && data.rentTotalCentavos is int
+        && data.rentTotalCentavos >= 0
+        && data.rentTotalCentavos <= 1000000000000000
+        && data.adjustmentTotalCentavos == 0
+        && data.totalBilledCentavos is int
+        && data.totalBilledCentavos >= 0
+        && data.totalBilledCentavos <= 1000000000000000
+        && data.totalBilledCentavos
+          == data.electricityTotalCentavos
+            + data.waterTotalCentavos
+            + data.rentTotalCentavos
+            + data.adjustmentTotalCentavos
+        && data.totalUnallocatedCentavos is int
+        && data.totalUnallocatedCentavos >= 0
+        && data.totalUnallocatedCentavos <= 1000000000000000
+        && data.statements is list
+        && data.statements.size() <= 500
+        && data.warnings is list
+        && data.warnings.size() <= 100
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp
+        && roomElectricitySourceMatches(ownerId, data)
+        && roomWaterSourceMatches(ownerId, data)
+        && roomBillingExcludesRent(data);
+    }
+
+    function isValidRoomBillAccount(data, accountId) {
+      return data.keys().hasAll([
+          'accountId',
+          'billingCycleId',
+          'roomId',
+          'roomName',
+          'totalChargesCentavos',
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountId',
+          'billingCycleId',
+          'roomId',
+          'roomName',
+          'totalChargesCentavos',
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.accountId == accountId
+        && isNonEmptyString(data.billingCycleId, 300)
+        && isNonEmptyString(data.roomId, 300)
+        && accountId == data.billingCycleId + '_' + data.roomId
+        && isNonEmptyString(data.roomName, 120)
+        && data.totalChargesCentavos is int
+        && data.totalChargesCentavos >= 0
+        && data.totalChargesCentavos <= 1000000000000000
+        && data.totalPaidCentavos is int
+        && data.totalPaidCentavos >= 0
+        && data.totalPaidCentavos <= data.totalChargesCentavos
+        && (
+          data.lastPaymentId == null
+          || isNonEmptyString(data.lastPaymentId, 300)
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRoomPayment(data, paymentId, ownerId) {
+      return data.keys().hasAll([
+          'paymentId',
+          'billingCycleId',
+          'accountId',
+          'roomId',
+          'roomName',
+          'amountCentavos',
+          'paymentDate',
+          'method',
+          'notes',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId',
+          'billingCycleId',
+          'accountId',
+          'roomId',
+          'roomName',
+          'amountCentavos',
+          'paymentDate',
+          'method',
+          'notes',
+          'createdBy',
+          'createdAt'
+        ])
+        && data.paymentId == paymentId
+        && isNonEmptyString(data.billingCycleId, 300)
+        && isNonEmptyString(data.roomId, 300)
+        && data.accountId == data.billingCycleId + '_' + data.roomId
+        && isNonEmptyString(data.roomName, 120)
+        && data.amountCentavos is int
+        && data.amountCentavos > 0
+        && data.amountCentavos <= 1000000000000000
+        && isRecordedBusinessDate(data.paymentDate)
+        && data.method in ['cash', 'gcash', 'bankTransfer', 'other']
+        && isOptionalString(data.notes, 500)
+        && data.createdBy == ownerId
+        && data.createdAt is timestamp;
+    }
+
+    match /users/{uid} {
+      allow get: if isVerifiedSelf(uid);
+      allow list: if false;
+
+      allow create: if isVerifiedSelf(uid)
+        && hasValidProfileFields()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && primaryHouseDoesNotExist(uid)
+        && pairedHouseBelongsTo(uid);
+
+      allow update: if isVerifiedSelf(uid)
+        && hasValidProfileFields()
+        && resource.data.primaryHouseId == 'primary'
+        && request.resource.data.primaryHouseId == resource.data.primaryHouseId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'email',
+          'displayName',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId} {
+      allow get: if houseId == 'primary' && isVerifiedSelf(ownerId);
+      allow list: if false;
+
+      allow create: if houseId == 'primary'
+        && isVerifiedSelf(ownerId)
+        && hasValidHouseFields(ownerId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && profileDoesNotExist(ownerId)
+        && pairedProfileSelectsPrimary(ownerId);
+
+      allow update: if houseId == 'primary'
+        && isVerifiedSelf(ownerId)
+        && resource.data.ownerUid == ownerId
+        && hasValidHouseFields(ownerId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.currencyCode == resource.data.currencyCode
+        && request.resource.data.businessTimeZone
+          == resource.data.businessTimeZone
+        && request.resource.data.schemaVersion == resource.data.schemaVersion
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rooms/{roomId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomData(roomId)
+        && request.resource.data.status == 'active'
+        && request.resource.data.activeOccupancyCount == 0
+        && request.resource.data.lastOccupancyMutationId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomData(roomId)
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          isRoomMetadataUpdate()
+          || isRoomOccupancyCountUpdate(ownerId, roomId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/boarders/{boarderId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBoarderData(boarderId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          isAtomicActiveBoarderCreation(ownerId, boarderId)
+          || isInactiveBoarderCreation()
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBoarderData(boarderId)
+        && request.resource.data.boarderId == resource.data.boarderId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          isBoarderMetadataUpdate()
+          || isBoarderDeactivation()
+          || isAtomicBoarderMoveIn(ownerId, boarderId)
+          || isAtomicBoarderMoveOut(ownerId, boarderId)
+          || isAtomicBoarderTransfer(ownerId, boarderId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/occupancies/{occupancyId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidOccupancyData(occupancyId)
+        && request.resource.data.moveOutDate == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && newOccupancyMatchesAfterState(ownerId, occupancyId)
+        && (
+          isInitialOccupancyCreation(ownerId)
+          || isLaterMoveInOccupancyCreation(ownerId)
+          || isTransferOccupancyCreation(ownerId, occupancyId)
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidOccupancyData(occupancyId)
+        && resource.data.moveOutDate == null
+        && request.resource.data.occupancyId == resource.data.occupancyId
+        && request.resource.data.boarderId == resource.data.boarderId
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.moveInDate == resource.data.moveInDate
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'moveOutDate',
+          'updatedAt'
+        ])
+        && (
+          isAtomicOccupancyCloseForMoveOut(ownerId, occupancyId)
+          || isAtomicOccupancyCloseForTransfer(ownerId, occupancyId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomMeterStates/{roomId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomMeterState(request.resource.data, roomId)
+        && request.resource.data.lastTransitionId
+          == request.resource.data.currentMeterId
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && isAtomicInitialMeterGraph(
+          ownerId,
+          roomId,
+          request.resource.data.currentMeterId
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomMeterState(request.resource.data, roomId)
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.currentMeterId != resource.data.currentMeterId
+        && request.resource.data.lastTransitionId
+          == request.resource.data.currentMeterId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'currentMeterId',
+          'lastTransitionId',
+          'updatedAt'
+        ])
+        && isAtomicMeterTransition(
+          ownerId,
+          roomId,
+          resource.data.currentMeterId,
+          request.resource.data.currentMeterId
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/electricityMeters/{meterId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityMeter(request.resource.data, meterId)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            request.resource.data.startKind == 'initial'
+            && isAtomicInitialMeterGraph(
+              ownerId,
+              request.resource.data.roomId,
+              meterId
+            )
+          )
+          || (
+            request.resource.data.startKind in [
+              'reset',
+              'replacement',
+              'correction'
+            ]
+            && isAtomicMeterTransition(
+              ownerId,
+              request.resource.data.roomId,
+              request.resource.data.previousMeterId,
+              meterId
+            )
+          )
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && (
+          (
+            request.resource.data.lastReadingId == resource.data.lastReadingId
+            && isCorrectionMeterWrite(ownerId, meterId)
+          )
+          || (
+            isValidElectricityMeter(request.resource.data, meterId)
+            && request.resource.data.meterId == resource.data.meterId
+            && request.resource.data.roomId == resource.data.roomId
+            && request.resource.data.sequenceNumber
+              == resource.data.sequenceNumber
+            && request.resource.data.startKind == resource.data.startKind
+            && request.resource.data.transitionReason
+              == resource.data.transitionReason
+            && request.resource.data.previousMeterId
+              == resource.data.previousMeterId
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedAt == request.time
+            && (
+              (
+                request.resource.data.status == resource.data.status
+                && request.resource.data.lastReadingId
+                  != resource.data.lastReadingId
+                && isMeterHeadOnlyUpdate(ownerId, meterId)
+              )
+              || (
+                resource.data.status == 'active'
+                && request.resource.data.status == 'retired'
+                && isMeterRetirementUpdate(ownerId, meterId)
+              )
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/meterReadings/{readingId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidMeterReading(request.resource.data, readingId)
+        && request.resource.data.createdAt == request.time
+        && (
+          (
+            request.resource.data.kind == 'opening'
+            && electricityMeterAfter(
+              ownerId,
+              request.resource.data.meterId
+            ).startKind == 'initial'
+            && isAtomicInitialMeterGraph(
+              ownerId,
+              request.resource.data.roomId,
+              request.resource.data.meterId
+            )
+          )
+          || (
+            request.resource.data.kind == 'opening'
+            && electricityMeterAfter(
+              ownerId,
+              request.resource.data.meterId
+            ).startKind in ['reset', 'replacement', 'correction']
+            && isAtomicMeterTransition(
+              ownerId,
+              request.resource.data.roomId,
+              electricityMeterAfter(
+                ownerId,
+                request.resource.data.meterId
+              ).previousMeterId,
+              request.resource.data.meterId
+            )
+          )
+          || (
+            request.resource.data.kind == 'intermediate'
+            && existsAfter(
+              /databases/$(database)/documents/owners/$(ownerId)/boardingHouses/$(houseId)/meterReadingInsertions/$(readingId)
+            )
+            && isAtomicHistoricalReadingInsertion(ownerId, readingId)
+          )
+          || (
+            request.resource.data.kind in ['regular', 'intermediate']
+            && isAtomicReadingAppend(
+              ownerId,
+              request.resource.data.meterId,
+              readingId
+            )
+          )
+          || (
+            request.resource.data.kind == 'closing'
+            && isAtomicMeterTransition(
+              ownerId,
+              request.resource.data.roomId,
+              request.resource.data.meterId,
+              electricityMeterAfter(
+                ownerId,
+                request.resource.data.meterId
+              ).replacementMeterId
+            )
+          )
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && (
+          (
+            request.resource.data.previousReadingId
+              != resource.data.previousReadingId
+            && isHistoricalInsertionSuccessorWrite(ownerId, readingId)
+          )
+          || (
+            request.resource.data.lastCorrectionId
+              != resource.data.lastCorrectionId
+            && isCorrectionReadingWrite(ownerId, readingId)
+          )
+          || (
+            isValidMeterReading(request.resource.data, readingId)
+            && isBillingLockOnlyUpdate(ownerId, readingId)
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/meterReadingCorrections/{correctionId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidMeterReadingCorrection(
+          request.resource.data,
+          correctionId,
+          ownerId
+        )
+        && isAtomicReadingCorrection(
+          ownerId,
+          request.resource.data.meterId,
+          request.resource.data.readingId,
+          correctionId
+        );
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/meterReadingInsertions/{insertionId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidMeterReadingInsertion(
+          request.resource.data,
+          insertionId,
+          ownerId
+        )
+        && isHistoricalInsertionAuditCreate(ownerId, insertionId);
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/electricityReadingBatches/{batchId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityReadingBatch(
+          request.resource.data,
+          batchId,
+          ownerId
+        )
+        && request.resource.data.status == 'draft'
+        && request.resource.data.pendingCount == request.resource.data.roomCount
+        && request.resource.data.recordedCount == 0
+        && request.resource.data.excludedCount == 0
+        && request.resource.data.totalConsumptionWh == 0
+        && request.resource.data.totalChargeCentavos == 0
+        && request.resource.data.version == 1
+        && request.resource.data.lastLinkId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityReadingBatch(
+          request.resource.data,
+          batchId,
+          ownerId
+        )
+        && request.resource.data.batchId == resource.data.batchId
+        && request.resource.data.batchReference == resource.data.batchReference
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          isElectricityBatchDraftEdit()
+          || isElectricityBatchReadingAppend(ownerId)
+          || isElectricityBatchFinalization()
+          || isElectricityBatchUse(ownerId, batchId)
+          || isElectricityBatchVoid(ownerId, batchId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/electricityBatchReadingLinks/{linkId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityBatchLink(request.resource.data, linkId, ownerId)
+        && isAtomicElectricityBatchLink(ownerId, linkId);
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/electricityBatchVoids/{voidId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityBatchVoid(request.resource.data, voidId, ownerId)
+        && electricityReadingBatchAfter(ownerId, voidId).status == 'voided'
+        && electricityReadingBatchAfter(ownerId, voidId).voidReason
+          == request.resource.data.reason;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/electricityBillingRecords/{recordId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidElectricityBillingRecord(
+          request.resource.data,
+          recordId,
+          ownerId
+        )
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/waterSettings/{settingsId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterSettings(request.resource.data, settingsId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterSettings(request.resource.data, settingsId)
+        && request.resource.data.settingsId == resource.data.settingsId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'defaultMethod',
+          'summerBasis',
+          'summerMonths',
+          'allowManualMethodOverride',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/waterBillingRecords/{recordId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterBillingRecord(
+          request.resource.data,
+          recordId,
+          ownerId
+        )
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/waterBillingBatches/{batchId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterBillingBatch(request.resource.data, batchId, ownerId)
+        && request.resource.data.status == 'draft'
+        && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterBillingBatch(request.resource.data, batchId, ownerId)
+        && request.resource.data.batchId == resource.data.batchId
+        && request.resource.data.batchReference == resource.data.batchReference
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          isWaterBatchDraftEdit()
+          || isWaterBatchFinalization()
+          || isWaterBatchUse(ownerId, batchId)
+          || isWaterBatchVoid(ownerId, batchId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/waterBillingBatchVoids/{voidId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidWaterBatchVoid(request.resource.data, voidId, ownerId)
+        && waterBillingBatchAfter(ownerId, voidId).status == 'voided'
+        && waterBillingBatchAfter(ownerId, voidId).voidReason
+          == request.resource.data.reason;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/utilityBillingBatches/{billingBatchId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidUtilityBillingBatch(
+          request.resource.data,
+          billingBatchId,
+          ownerId
+        );
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/utilityRoomBillAccounts/{accountId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidUtilityRoomBillAccount(
+          request.resource.data,
+          accountId,
+          ownerId
+        );
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidUtilityRoomBillAccountUpdate(
+          request.resource.data,
+          accountId,
+          ownerId
+        )
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.billingBatchId
+          == resource.data.billingBatchId
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.roomName == resource.data.roomName
+        && request.resource.data.totalChargesCentavos
+          == resource.data.totalChargesCentavos
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.totalPaidCentavos
+          > resource.data.totalPaidCentavos
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'totalPaidCentavos', 'lastPaymentId', 'updatedAt'
+        ])
+        && utilityRoomPaymentAfter(
+          ownerId,
+          request.resource.data.lastPaymentId
+        ).accountId == accountId
+        && request.resource.data.totalPaidCentavos
+          == resource.data.totalPaidCentavos
+            + utilityRoomPaymentAfter(
+              ownerId,
+              request.resource.data.lastPaymentId
+            ).amountCentavos;
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/utilityRoomPayments/{paymentId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidUtilityRoomPayment(
+          request.resource.data,
+          paymentId,
+          ownerId
+        )
+        && request.resource.data.createdAt == request.time
+        && utilityBillingBatchBefore(
+          ownerId,
+          request.resource.data.billingBatchId
+        ).status == 'finalized'
+        && utilityRoomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).billingBatchId == request.resource.data.billingBatchId
+        && utilityRoomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).roomId == request.resource.data.roomId
+        && utilityRoomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).roomName == request.resource.data.roomName
+        && utilityRoomBillAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).lastPaymentId == paymentId
+        && utilityRoomBillAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).totalPaidCentavos
+          == utilityRoomBillAccountBefore(
+            ownerId,
+            request.resource.data.accountId
+          ).totalPaidCentavos + request.resource.data.amountCentavos;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentSettings/{settingsId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentSettings(request.resource.data, settingsId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentSettings(request.resource.data, settingsId)
+        && request.resource.data.settingsId == resource.data.settingsId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'mode',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentBillingRecords/{recordId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentBillingRecord(
+          request.resource.data,
+          recordId,
+          ownerId
+        )
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentAgreements/{agreementId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentAgreement(request.resource.data, agreementId, ownerId)
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentCycles/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentCycle(request.resource.data, cycleId, ownerId)
+        && request.resource.data.createdAt == request.time
+        && isValidRentCycleControl(rentCycleControlAfter(ownerId, cycleId), cycleId)
+        && rentCycleControlAfter(ownerId, cycleId).totalPaidCentavos == 0
+        && rentCycleControlAfter(ownerId, cycleId).lastPaymentId == null;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentCycleControls/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentCycleControl(request.resource.data, cycleId)
+        && request.resource.data.totalPaidCentavos == 0
+        && request.resource.data.lastPaymentId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && isValidRentCycle(rentCycleAfter(ownerId, cycleId), cycleId, ownerId);
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentCycleControl(request.resource.data, cycleId)
+        && request.resource.data.cycleId == resource.data.cycleId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'totalPaidCentavos', 'lastPaymentId', 'updatedAt'
+        ])
+        && request.resource.data.totalPaidCentavos > resource.data.totalPaidCentavos
+        && isValidRentPayment(
+          rentPaymentAfter(ownerId, request.resource.data.lastPaymentId),
+          request.resource.data.lastPaymentId,
+          ownerId
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentPayments/{paymentId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRentPayment(request.resource.data, paymentId, ownerId)
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/rentExtraStayResolutions/{resolutionId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidExtraStayResolution(
+          request.resource.data,
+          resolutionId,
+          ownerId
+        )
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/billingPeriods/{periodId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingPeriod(request.resource.data, periodId)
+        && request.resource.data.activeCycleId
+          == request.resource.data.latestCycleId
+        && request.resource.data.latestVersion == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && billingCycleAfter(
+          ownerId,
+          request.resource.data.activeCycleId
+        ).periodId == periodId;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingPeriod(request.resource.data, periodId)
+        && request.resource.data.periodId == resource.data.periodId
+        && request.resource.data.startDate == resource.data.startDate
+        && request.resource.data.endDateExclusive
+          == resource.data.endDateExclusive
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'activeCycleId',
+          'latestCycleId',
+          'latestVersion',
+          'updatedAt'
+        ])
+        && (
+          (
+            resource.data.activeCycleId != null
+            && request.resource.data.activeCycleId == null
+            && request.resource.data.latestCycleId
+              == resource.data.latestCycleId
+            && request.resource.data.latestVersion
+              == resource.data.latestVersion
+            && billingControlAfter(
+              ownerId,
+              resource.data.activeCycleId
+            ).state == 'voided'
+          )
+          || (
+            resource.data.activeCycleId == null
+            && request.resource.data.activeCycleId
+              == request.resource.data.latestCycleId
+            && request.resource.data.latestVersion
+              == resource.data.latestVersion + 1
+            && billingCycleAfter(
+              ownerId,
+              request.resource.data.activeCycleId
+            ).version == request.resource.data.latestVersion
+            && billingCycleAfter(
+              ownerId,
+              request.resource.data.activeCycleId
+            ).replacesCycleId == resource.data.latestCycleId
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/monthlyBillingCycles/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidMonthlyBillingCycle(request.resource.data, cycleId, ownerId)
+        && request.resource.data.createdAt == request.time
+        && billingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).activeCycleId == cycleId
+        && billingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).latestCycleId == cycleId
+        && billingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).latestVersion == request.resource.data.version
+        && (
+          (
+            request.resource.data.version == 1
+            && request.resource.data.replacesCycleId == null
+          )
+          || (
+            request.resource.data.version > 1
+            && isNonEmptyString(
+              request.resource.data.replacesCycleId,
+              300
+            )
+            && billingControlAfter(
+              ownerId,
+              request.resource.data.replacesCycleId
+            ).reissuedAsCycleId == cycleId
+          )
+        );
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/billingCycleControls/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingCycleControl(request.resource.data, cycleId)
+        && request.resource.data.state == 'active'
+        && request.resource.data.totalPaidCentavos == 0
+        && request.resource.data.outstandingCentavos
+          == request.resource.data.totalBilledCentavos
+        && request.resource.data.lastPaymentId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && billingCycleAfter(ownerId, cycleId).totalBilledCentavos
+          == request.resource.data.totalBilledCentavos;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingCycleControl(request.resource.data, cycleId)
+        && request.resource.data.billingCycleId
+          == resource.data.billingCycleId
+        && request.resource.data.totalBilledCentavos
+          == resource.data.totalBilledCentavos
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            resource.data.state == 'active'
+            && request.resource.data.state == 'active'
+            && request.resource.data.voidReason == resource.data.voidReason
+            && request.resource.data.voidedAt == resource.data.voidedAt
+            && request.resource.data.reissuedAsCycleId
+              == resource.data.reissuedAsCycleId
+            && request.resource.data.totalPaidCentavos
+              > resource.data.totalPaidCentavos
+            && request.resource.data.lastPaymentId != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'totalPaidCentavos',
+              'outstandingCentavos',
+              'lastPaymentId',
+              'updatedAt'
+            ])
+            && paymentAfter(
+              ownerId,
+              request.resource.data.lastPaymentId
+            ).billingCycleId == cycleId
+            && request.resource.data.totalPaidCentavos
+              == resource.data.totalPaidCentavos
+                + paymentAfter(
+                  ownerId,
+                  request.resource.data.lastPaymentId
+                ).amountCentavos
+          )
+          || (
+            resource.data.state == 'active'
+            && resource.data.totalPaidCentavos == 0
+            && request.resource.data.state == 'voided'
+            && request.resource.data.totalPaidCentavos == 0
+            && request.resource.data.lastPaymentId
+              == resource.data.lastPaymentId
+            && request.resource.data.reissuedAsCycleId
+              == resource.data.reissuedAsCycleId
+            && request.resource.data.voidedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'state',
+              'voidReason',
+              'voidedAt',
+              'updatedAt'
+            ])
+            && billingPeriodAfter(
+              ownerId,
+              billingCycleBefore(ownerId, cycleId).periodId
+            ).activeCycleId == null
+          )
+          || (
+            resource.data.state == 'voided'
+            && request.resource.data.state == 'voided'
+            && resource.data.reissuedAsCycleId == null
+            && isNonEmptyString(
+              request.resource.data.reissuedAsCycleId,
+              300
+            )
+            && request.resource.data.totalPaidCentavos
+              == resource.data.totalPaidCentavos
+            && request.resource.data.outstandingCentavos
+              == resource.data.outstandingCentavos
+            && request.resource.data.lastPaymentId
+              == resource.data.lastPaymentId
+            && request.resource.data.voidReason == resource.data.voidReason
+            && request.resource.data.voidedAt == resource.data.voidedAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'reissuedAsCycleId',
+              'updatedAt'
+            ])
+            && billingCycleAfter(
+              ownerId,
+              request.resource.data.reissuedAsCycleId
+            ).replacesCycleId == cycleId
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/boarderBillAccounts/{accountId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBoarderBillAccount(request.resource.data, accountId)
+        && request.resource.data.totalPaidCentavos == 0
+        && request.resource.data.lastPaymentId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBoarderBillAccount(request.resource.data, accountId)
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.billingCycleId
+          == resource.data.billingCycleId
+        && request.resource.data.boarderId == resource.data.boarderId
+        && request.resource.data.boarderName == resource.data.boarderName
+        && request.resource.data.totalChargesCentavos
+          == resource.data.totalChargesCentavos
+        && request.resource.data.previousBalanceCentavos
+          == resource.data.previousBalanceCentavos
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.totalPaidCentavos
+          > resource.data.totalPaidCentavos
+        && request.resource.data.lastPaymentId != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'updatedAt'
+        ])
+        && paymentAfter(
+          ownerId,
+          request.resource.data.lastPaymentId
+        ).accountId == accountId
+        && request.resource.data.totalPaidCentavos
+          == resource.data.totalPaidCentavos
+            + paymentAfter(
+              ownerId,
+              request.resource.data.lastPaymentId
+            ).amountCentavos;
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/payments/{paymentId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidPayment(request.resource.data, paymentId, ownerId)
+        && request.resource.data.createdAt == request.time
+        && billAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).billingCycleId == request.resource.data.billingCycleId
+        && billAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).boarderId == request.resource.data.boarderId
+        && billAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).boarderName == request.resource.data.boarderName
+        && billAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).lastPaymentId == paymentId
+        && billAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).totalPaidCentavos
+          == billAccountBefore(
+            ownerId,
+            request.resource.data.accountId
+          ).totalPaidCentavos + request.resource.data.amountCentavos
+        && billingControlBefore(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).state == 'active'
+        && billingControlAfter(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).lastPaymentId == paymentId
+        && billingControlAfter(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).totalPaidCentavos
+          == billingControlBefore(
+            ownerId,
+            request.resource.data.billingCycleId
+          ).totalPaidCentavos + request.resource.data.amountCentavos;
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomBillingPeriods/{periodId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingPeriod(request.resource.data, periodId)
+        && request.resource.data.activeCycleId
+          == request.resource.data.latestCycleId
+        && request.resource.data.latestVersion == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && roomBillingCycleAfter(
+          ownerId,
+          request.resource.data.activeCycleId
+        ).periodId == periodId;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingPeriod(request.resource.data, periodId)
+        && request.resource.data.periodId == resource.data.periodId
+        && request.resource.data.startDate == resource.data.startDate
+        && request.resource.data.endDateExclusive
+          == resource.data.endDateExclusive
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'activeCycleId',
+          'latestCycleId',
+          'latestVersion',
+          'updatedAt'
+        ])
+        && (
+          (
+            resource.data.activeCycleId != null
+            && request.resource.data.activeCycleId == null
+            && request.resource.data.latestCycleId
+              == resource.data.latestCycleId
+            && request.resource.data.latestVersion
+              == resource.data.latestVersion
+            && roomBillingControlAfter(
+              ownerId,
+              resource.data.activeCycleId
+            ).state == 'voided'
+          )
+          || (
+            resource.data.activeCycleId == null
+            && request.resource.data.activeCycleId
+              == request.resource.data.latestCycleId
+            && request.resource.data.latestVersion
+              == resource.data.latestVersion + 1
+            && roomBillingCycleAfter(
+              ownerId,
+              request.resource.data.activeCycleId
+            ).version == request.resource.data.latestVersion
+            && roomBillingCycleAfter(
+              ownerId,
+              request.resource.data.activeCycleId
+            ).replacesCycleId == resource.data.latestCycleId
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomBillingCycles/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomBillingCycle(request.resource.data, cycleId, ownerId)
+        && request.resource.data.createdAt == request.time
+        && roomBillingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).activeCycleId == cycleId
+        && roomBillingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).latestCycleId == cycleId
+        && roomBillingPeriodAfter(
+          ownerId,
+          request.resource.data.periodId
+        ).latestVersion == request.resource.data.version
+        && (
+          (
+            request.resource.data.version == 1
+            && request.resource.data.replacesCycleId == null
+          )
+          || (
+            request.resource.data.version > 1
+            && isNonEmptyString(
+              request.resource.data.replacesCycleId,
+              300
+            )
+            && roomBillingControlAfter(
+              ownerId,
+              request.resource.data.replacesCycleId
+            ).reissuedAsCycleId == cycleId
+          )
+        );
+
+      allow update, delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomBillingControls/{cycleId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingCycleControl(request.resource.data, cycleId)
+        && request.resource.data.state == 'active'
+        && request.resource.data.totalPaidCentavos == 0
+        && request.resource.data.outstandingCentavos
+          == request.resource.data.totalBilledCentavos
+        && request.resource.data.lastPaymentId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && roomBillingCycleAfter(ownerId, cycleId).totalBilledCentavos
+          == request.resource.data.totalBilledCentavos;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidBillingCycleControl(request.resource.data, cycleId)
+        && request.resource.data.billingCycleId
+          == resource.data.billingCycleId
+        && request.resource.data.totalBilledCentavos
+          == resource.data.totalBilledCentavos
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            resource.data.state == 'active'
+            && request.resource.data.state == 'active'
+            && request.resource.data.voidReason == resource.data.voidReason
+            && request.resource.data.voidedAt == resource.data.voidedAt
+            && request.resource.data.reissuedAsCycleId
+              == resource.data.reissuedAsCycleId
+            && request.resource.data.totalPaidCentavos
+              > resource.data.totalPaidCentavos
+            && request.resource.data.lastPaymentId != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'totalPaidCentavos',
+              'outstandingCentavos',
+              'lastPaymentId',
+              'updatedAt'
+            ])
+            && roomPaymentAfter(
+              ownerId,
+              request.resource.data.lastPaymentId
+            ).billingCycleId == cycleId
+            && request.resource.data.totalPaidCentavos
+              == resource.data.totalPaidCentavos
+                + roomPaymentAfter(
+                  ownerId,
+                  request.resource.data.lastPaymentId
+                ).amountCentavos
+          )
+          || (
+            resource.data.state == 'active'
+            && resource.data.totalPaidCentavos == 0
+            && request.resource.data.state == 'voided'
+            && request.resource.data.totalPaidCentavos == 0
+            && request.resource.data.lastPaymentId
+              == resource.data.lastPaymentId
+            && request.resource.data.reissuedAsCycleId
+              == resource.data.reissuedAsCycleId
+            && request.resource.data.voidedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'state',
+              'voidReason',
+              'voidedAt',
+              'updatedAt'
+            ])
+            && roomBillingPeriodAfter(
+              ownerId,
+              roomBillingCycleBefore(ownerId, cycleId).periodId
+            ).activeCycleId == null
+          )
+          || (
+            resource.data.state == 'voided'
+            && request.resource.data.state == 'voided'
+            && resource.data.reissuedAsCycleId == null
+            && isNonEmptyString(
+              request.resource.data.reissuedAsCycleId,
+              300
+            )
+            && request.resource.data.totalPaidCentavos
+              == resource.data.totalPaidCentavos
+            && request.resource.data.outstandingCentavos
+              == resource.data.outstandingCentavos
+            && request.resource.data.lastPaymentId
+              == resource.data.lastPaymentId
+            && request.resource.data.voidReason == resource.data.voidReason
+            && request.resource.data.voidedAt == resource.data.voidedAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'reissuedAsCycleId',
+              'updatedAt'
+            ])
+            && roomBillingCycleAfter(
+              ownerId,
+              request.resource.data.reissuedAsCycleId
+            ).replacesCycleId == cycleId
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomBillAccounts/{accountId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomBillAccount(request.resource.data, accountId)
+        && request.resource.data.totalPaidCentavos == 0
+        && request.resource.data.lastPaymentId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && roomBillingCycleAfter(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).billingCycleId == request.resource.data.billingCycleId
+        && request.resource.data.totalChargesCentavos
+          <= roomBillingCycleAfter(
+            ownerId,
+            request.resource.data.billingCycleId
+          ).totalBilledCentavos;
+
+      allow update: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomBillAccount(request.resource.data, accountId)
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.billingCycleId
+          == resource.data.billingCycleId
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.roomName == resource.data.roomName
+        && request.resource.data.totalChargesCentavos
+          == resource.data.totalChargesCentavos
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.totalPaidCentavos
+          > resource.data.totalPaidCentavos
+        && request.resource.data.lastPaymentId != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'totalPaidCentavos',
+          'lastPaymentId',
+          'updatedAt'
+        ])
+        && roomPaymentAfter(
+          ownerId,
+          request.resource.data.lastPaymentId
+        ).accountId == accountId
+        && request.resource.data.totalPaidCentavos
+          == resource.data.totalPaidCentavos
+            + roomPaymentAfter(
+              ownerId,
+              request.resource.data.lastPaymentId
+            ).amountCentavos;
+
+      allow delete: if false;
+    }
+
+    match /owners/{ownerId}/boardingHouses/{houseId}/roomPayments/{paymentId} {
+      allow read: if isPrimaryHouseOwner(ownerId, houseId);
+
+      allow create: if isPrimaryHouseOwner(ownerId, houseId)
+        && isValidRoomPayment(request.resource.data, paymentId, ownerId)
+        && request.resource.data.createdAt == request.time
+        && roomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).billingCycleId == request.resource.data.billingCycleId
+        && roomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).roomId == request.resource.data.roomId
+        && roomBillAccountBefore(
+          ownerId,
+          request.resource.data.accountId
+        ).roomName == request.resource.data.roomName
+        && roomBillAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).lastPaymentId == paymentId
+        && roomBillAccountAfter(
+          ownerId,
+          request.resource.data.accountId
+        ).totalPaidCentavos
+          == roomBillAccountBefore(
+            ownerId,
+            request.resource.data.accountId
+          ).totalPaidCentavos + request.resource.data.amountCentavos
+        && roomBillingControlBefore(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).state == 'active'
+        && roomBillingControlAfter(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).lastPaymentId == paymentId
+        && roomBillingControlAfter(
+          ownerId,
+          request.resource.data.billingCycleId
+        ).totalPaidCentavos
+          == roomBillingControlBefore(
+            ownerId,
+            request.resource.data.billingCycleId
+          ).totalPaidCentavos + request.resource.data.amountCentavos;
+
+      allow update, delete: if false;
+    }
+
+    // Undeclared collections remain fail-closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
